@@ -1,12 +1,55 @@
 import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { supabase } from '../../config-supabase';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function Login() {
   const router = useRouter();
   const [tipo, setTipo] = useState('cliente');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [carregando, setCarregando] = useState(false);
+
+  async function entrar() {
+    if (!email || !senha) {
+      Alert.alert('Erro', 'Preencha email e senha!');
+      return;
+    }
+    setCarregando(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
+      if (error) {
+        Alert.alert('Erro', 'Email ou senha incorretos!');
+        return;
+      }
+      if (tipo === 'cliente') router.push('/servicos');
+      if (tipo === 'profissional') router.push('/profissional');
+      if (tipo === 'admin') router.push('/admin');
+    } catch (e) {
+      Alert.alert('Erro', 'Algo deu errado!');
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  async function entrarComGoogle() {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: 'bellafast://auth/callback',
+        },
+      });
+      if (error) {
+        Alert.alert('Erro', 'Nao foi possivel entrar com Google!');
+      }
+    } catch (e) {
+      Alert.alert('Erro', 'Algo deu errado!');
+    }
+  }
 
   return (
     <View style={styles.container}>
@@ -28,12 +71,8 @@ export default function Login() {
       <TextInput style={styles.input} placeholder="Seu email" placeholderTextColor="#999" keyboardType="email-address" value={email} onChangeText={setEmail} />
       <TextInput style={styles.input} placeholder="Sua senha" placeholderTextColor="#999" secureTextEntry={true} value={senha} onChangeText={setSenha} />
 
-      <TouchableOpacity style={styles.botao} onPress={() => {
-        if (tipo === 'cliente') router.push('/servicos');
-        if (tipo === 'profissional') router.push('/profissional');
-        if (tipo === 'admin') router.push('/admin');
-      }}>
-        <Text style={styles.botaoTexto}>Entrar</Text>
+      <TouchableOpacity style={carregando ? styles.botaoDesabilitado : styles.botao} onPress={entrar} disabled={carregando}>
+        <Text style={styles.botaoTexto}>{carregando ? 'Entrando...' : 'Entrar'}</Text>
       </TouchableOpacity>
 
       <View style={styles.separadorRow}>
@@ -42,7 +81,7 @@ export default function Login() {
         <View style={styles.separadorLinha} />
       </View>
 
-      <TouchableOpacity style={styles.botaoGoogle}>
+      <TouchableOpacity style={styles.botaoGoogle} onPress={entrarComGoogle}>
         <Text style={styles.botaoGoogleLetra}>G</Text>
         <Text style={styles.botaoGoogleTexto}>Entrar com Google</Text>
       </TouchableOpacity>
@@ -73,6 +112,7 @@ const styles = StyleSheet.create({
   tipoTexto: { color: '#999', fontSize: 14 },
   input: { width: '100%', backgroundColor: '#2d1b4e', borderRadius: 10, padding: 15, color: '#ffffff', marginBottom: 15, fontSize: 16 },
   botao: { width: '100%', backgroundColor: '#f0a500', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 5 },
+  botaoDesabilitado: { width: '100%', backgroundColor: '#555', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 5 },
   botaoTexto: { color: '#1a0a2e', fontWeight: 'bold', fontSize: 18 },
   separadorRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginVertical: 20 },
   separadorLinha: { flex: 1, height: 1, backgroundColor: '#444' },
