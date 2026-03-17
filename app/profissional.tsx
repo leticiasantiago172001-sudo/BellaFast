@@ -1,12 +1,29 @@
+import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../config-supabase';
 import { agendarNotificacao30min, enviarNotificacaoLocal } from './notificacoes-config';
+
+const CATEGORIAS = [
+  { id: 'unhas', nome: 'Unhas', emoji: '💅' },
+  { id: 'cabelo', nome: 'Cabelo', emoji: '✂️' },
+  { id: 'massagem', nome: 'Massagem', emoji: '🌿' },
+  { id: 'depilacao', nome: 'Depilacao', emoji: '✨' },
+  { id: 'maquiagem', nome: 'Maquiagem', emoji: '💄' },
+  { id: 'estetica', nome: 'Estetica', emoji: '🌸' },
+];
 
 export default function Profissional() {
   const [pedidos, setPedidos] = useState<any[]>([]);
   const [aba, setAba] = useState('pedidos');
   const [carregando, setCarregando] = useState(true);
+  const [editando, setEditando] = useState(false);
+  const [nome, setNome] = useState('');
+  const [telefone, setTelefone] = useState('');
+  const [endereco, setEndereco] = useState('');
+  const [raio, setRaio] = useState('10');
+  const [categoriasSelecionadas, setCategoriasSelecionadas] = useState<string[]>([]);
+  const [foto, setFoto] = useState<string | null>(null);
 
   useEffect(() => {
     buscarPedidos();
@@ -42,6 +59,47 @@ export default function Profissional() {
     buscarPedidos();
   }
 
+  function toggleCategoria(id: string) {
+    setCategoriasSelecionadas((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+    );
+  }
+
+  async function escolherFoto() {
+    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissao.granted) {
+      Alert.alert('Permissao negada', 'Precisamos de acesso a sua galeria!');
+      return;
+    }
+    const resultado = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+    if (!resultado.canceled) {
+      setFoto(resultado.assets[0].uri);
+    }
+  }
+
+  async function salvarPerfil() {
+    try {
+      const { data: usuario } = await supabase.auth.getUser();
+      if (usuario?.user) {
+        await supabase.from('usuarios').update({ nome, telefone }).eq('email', usuario.user.email);
+        await supabase.from('profissionais').update({
+          especialidades: categoriasSelecionadas.join(', '),
+          endereco_completo: endereco,
+          raio_atendimento: parseInt(raio),
+        }).eq('usuario_id', usuario.user.id);
+      }
+      Alert.alert('Sucesso!', 'Perfil atualizado!');
+      setEditando(false);
+    } catch (e) {
+      Alert.alert('Erro', 'Nao foi possivel salvar!');
+    }
+  }
+
   const pendentes = pedidos.filter((p) => p.status === 'pendente');
   const aceitos = pedidos.filter((p) => p.status === 'aceito');
   const concluidos = pedidos.filter((p) => p.status === 'concluido');
@@ -49,6 +107,7 @@ export default function Profissional() {
   return (
     <ScrollView style={styles.scroll}>
       <View style={styles.container}>
+
         <View style={styles.abas}>
           {['pedidos', 'agenda', 'ganhos', 'perfil'].map((a) => (
             <TouchableOpacity key={a} style={aba === a ? styles.abaAtiva : styles.abaInativa} onPress={() => setAba(a)}>
@@ -122,16 +181,87 @@ export default function Profissional() {
         )}
 
         {aba === 'perfil' && (
-          <View style={styles.perfilContainer}>
-            <View style={styles.perfilFoto}>
-              <Text style={styles.perfilFotoTexto}>J</Text>
+          <View>
+            <View style={styles.perfilFotoContainer}>
+              <TouchableOpacity onPress={escolherFoto}>
+                <View style={styles.perfilFoto}>
+                  {foto ? (
+                    <Image source={{ uri: foto }} style={{ width: 100, height: 100, borderRadius: 50 }} />
+                  ) : (
+                    <Text style={styles.perfilFotoTexto}>👩</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.botaoFoto} onPress={escolherFoto}>
+                <Text style={styles.botaoFotoTexto}>Alterar foto</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.perfilNome}>Jessica Oliveira</Text>
-            <Text style={styles.perfilProfissao}>Manicure e Esteticista</Text>
-            <View style={styles.avaliacaoRow}>
-              <Text style={styles.estrelas}>★★★★★</Text>
-              <Text style={styles.avaliacaoTexto}>4.9 (127 avaliacoes)</Text>
-            </View>
+
+            {!editando ? (
+              <View>
+                <View style={styles.perfilCard}>
+                  <Text style={styles.perfilLabel}>Nome</Text>
+                  <Text style={styles.perfilValor}>{nome || 'Clique em editar para preencher'}</Text>
+                </View>
+                <View style={styles.perfilCard}>
+                  <Text style={styles.perfilLabel}>Telefone</Text>
+                  <Text style={styles.perfilValor}>{telefone || 'Nao informado'}</Text>
+                </View>
+                <View style={styles.perfilCard}>
+                  <Text style={styles.perfilLabel}>Endereco de atendimento</Text>
+                  <Text style={styles.perfilValor}>{endereco || 'Nao informado'}</Text>
+                </View>
+                <View style={styles.perfilCard}>
+                  <Text style={styles.perfilLabel}>Raio de atendimento</Text>
+                  <Text style={styles.perfilValor}>{raio} km</Text>
+                </View>
+                <View style={styles.perfilCard}>
+                  <Text style={styles.perfilLabel}>Especialidades</Text>
+                  <View style={styles.categoriasRow}>
+                    {categoriasSelecionadas.length > 0 ? categoriasSelecionadas.map((c) => {
+                      const cat = CATEGORIAS.find((x) => x.id === c);
+                      return cat ? (
+                        <View key={c} style={styles.categoriaTag}>
+                          <Text style={styles.categoriaTagTexto}>{cat.emoji} {cat.nome}</Text>
+                        </View>
+                      ) : null;
+                    }) : <Text style={styles.perfilValor}>Nenhuma selecionada</Text>}
+                  </View>
+                </View>
+                <TouchableOpacity style={styles.botaoEditar} onPress={() => setEditando(true)}>
+                  <Text style={styles.botaoEditarTexto}>Editar perfil</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View>
+                <Text style={styles.secao}>Editando perfil</Text>
+                <TextInput style={styles.input} placeholder="Seu nome completo" placeholderTextColor="#999" value={nome} onChangeText={setNome} />
+                <TextInput style={styles.input} placeholder="Seu telefone" placeholderTextColor="#999" keyboardType="phone-pad" value={telefone} onChangeText={setTelefone} />
+                <TextInput style={styles.input} placeholder="Seu endereco completo" placeholderTextColor="#999" value={endereco} onChangeText={setEndereco} />
+                <TextInput style={styles.input} placeholder="Raio de atendimento (km)" placeholderTextColor="#999" keyboardType="numeric" value={raio} onChangeText={setRaio} />
+
+                <Text style={styles.secao}>Suas especialidades</Text>
+                <View style={styles.categoriasGrid}>
+                  {CATEGORIAS.map((c) => (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={categoriasSelecionadas.includes(c.id) ? styles.categoriaAtiva : styles.categoriaInativa}
+                      onPress={() => toggleCategoria(c.id)}
+                    >
+                      <Text style={styles.categoriaEmoji}>{c.emoji}</Text>
+                      <Text style={categoriasSelecionadas.includes(c.id) ? styles.categoriaTextoAtivo : styles.categoriaTexto}>{c.nome}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TouchableOpacity style={styles.botaoSalvar} onPress={salvarPerfil}>
+                  <Text style={styles.botaoSalvarTexto}>Salvar perfil</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.botaoCancelar} onPress={() => setEditando(false)}>
+                  <Text style={styles.botaoCancelarTexto}>Cancelar</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
       </View>
@@ -168,12 +298,28 @@ const styles = StyleSheet.create({
   faturamentoLabel: { color: '#999', fontSize: 14, marginBottom: 8 },
   faturamentoValor: { color: '#f0a500', fontSize: 36, fontWeight: 'bold' },
   faturamentoSub: { color: '#999', fontSize: 13, marginTop: 5 },
-  perfilContainer: { alignItems: 'center' },
-  perfilFoto: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#f0a500', alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
-  perfilFotoTexto: { fontSize: 40, fontWeight: 'bold', color: '#1a0a2e' },
-  perfilNome: { fontSize: 24, fontWeight: 'bold', color: '#ffffff', marginBottom: 5 },
-  perfilProfissao: { fontSize: 14, color: '#999', marginBottom: 10 },
-  avaliacaoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  estrelas: { color: '#f0a500', fontSize: 18, marginRight: 8 },
-  avaliacaoTexto: { color: '#999', fontSize: 14 },
+  perfilFotoContainer: { alignItems: 'center', marginBottom: 20 },
+  perfilFoto: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#2d1b4e', alignItems: 'center', justifyContent: 'center', marginBottom: 10, borderWidth: 3, borderColor: '#f0a500' },
+  perfilFotoTexto: { fontSize: 50 },
+  botaoFoto: { backgroundColor: '#2d1b4e', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: '#f0a500' },
+  botaoFotoTexto: { color: '#f0a500', fontSize: 13, fontWeight: 'bold' },
+  perfilCard: { backgroundColor: '#2d1b4e', borderRadius: 12, padding: 15, marginBottom: 10 },
+  perfilLabel: { color: '#999', fontSize: 12, marginBottom: 5 },
+  perfilValor: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
+  categoriasRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 5 },
+  categoriaTag: { backgroundColor: '#f0a500', borderRadius: 15, paddingVertical: 4, paddingHorizontal: 10, margin: 3 },
+  categoriaTagTexto: { color: '#1a0a2e', fontSize: 12, fontWeight: 'bold' },
+  botaoEditar: { width: '100%', borderWidth: 2, borderColor: '#f0a500', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 10 },
+  botaoEditarTexto: { color: '#f0a500', fontWeight: 'bold', fontSize: 16 },
+  input: { width: '100%', backgroundColor: '#2d1b4e', borderRadius: 10, padding: 15, color: '#ffffff', marginBottom: 15, fontSize: 16 },
+  categoriasGrid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 20 },
+  categoriaAtiva: { backgroundColor: '#f0a500', borderRadius: 12, padding: 12, margin: 5, alignItems: 'center', width: '28%' },
+  categoriaInativa: { backgroundColor: '#2d1b4e', borderRadius: 12, padding: 12, margin: 5, alignItems: 'center', width: '28%', borderWidth: 1, borderColor: '#444' },
+  categoriaEmoji: { fontSize: 24, marginBottom: 5 },
+  categoriaTextoAtivo: { color: '#1a0a2e', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
+  categoriaTexto: { color: '#999', fontSize: 12, textAlign: 'center' },
+  botaoSalvar: { width: '100%', backgroundColor: '#f0a500', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 10 },
+  botaoSalvarTexto: { color: '#1a0a2e', fontWeight: 'bold', fontSize: 16 },
+  botaoCancelar: { width: '100%', borderWidth: 2, borderColor: '#ff4444', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 10 },
+  botaoCancelarTexto: { color: '#ff4444', fontWeight: 'bold', fontSize: 16 },
 });

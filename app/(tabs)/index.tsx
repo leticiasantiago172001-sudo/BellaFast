@@ -1,10 +1,7 @@
 import { useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../../config-supabase';
-
-WebBrowser.maybeCompleteAuthSession();
 
 export default function Login() {
   const router = useRouter();
@@ -35,22 +32,6 @@ export default function Login() {
     }
   }
 
-  async function entrarComGoogle() {
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: 'bellafast://auth/callback',
-        },
-      });
-      if (error) {
-        Alert.alert('Erro', 'Nao foi possivel entrar com Google!');
-      }
-    } catch (e) {
-      Alert.alert('Erro', 'Algo deu errado!');
-    }
-  }
-
   return (
     <View style={styles.container}>
       <Text style={styles.logo}>BellaFast</Text>
@@ -75,20 +56,15 @@ export default function Login() {
         <Text style={styles.botaoTexto}>{carregando ? 'Entrando...' : 'Entrar'}</Text>
       </TouchableOpacity>
 
-      <View style={styles.separadorRow}>
-        <View style={styles.separadorLinha} />
-        <Text style={styles.separadorTexto}>ou</Text>
-        <View style={styles.separadorLinha} />
-      </View>
-
-      <TouchableOpacity style={styles.botaoGoogle} onPress={entrarComGoogle}>
-        <Text style={styles.botaoGoogleLetra}>G</Text>
-        <Text style={styles.botaoGoogleTexto}>Entrar com Google</Text>
-      </TouchableOpacity>
-
       {tipo === 'cliente' && (
         <TouchableOpacity onPress={() => router.push('/cadastro')}>
           <Text style={styles.cadastro}>Nao tem conta? <Text style={styles.link}>Cadastre-se</Text></Text>
+        </TouchableOpacity>
+      )}
+
+      {tipo === 'profissional' && (
+        <TouchableOpacity onPress={() => router.push('/cadastro-profissional')}>
+          <Text style={styles.cadastro}>Quer trabalhar conosco? <Text style={styles.link}>Cadastre-se como profissional</Text></Text>
         </TouchableOpacity>
       )}
 
@@ -114,13 +90,7 @@ const styles = StyleSheet.create({
   botao: { width: '100%', backgroundColor: '#f0a500', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 5 },
   botaoDesabilitado: { width: '100%', backgroundColor: '#555', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 5 },
   botaoTexto: { color: '#1a0a2e', fontWeight: 'bold', fontSize: 18 },
-  separadorRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginVertical: 20 },
-  separadorLinha: { flex: 1, height: 1, backgroundColor: '#444' },
-  separadorTexto: { color: '#999', marginHorizontal: 10, fontSize: 14 },
-  botaoGoogle: { width: '100%', backgroundColor: '#ffffff', borderRadius: 10, padding: 15, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
-  botaoGoogleLetra: { fontSize: 20, fontWeight: 'bold', color: '#4285F4', marginRight: 10 },
-  botaoGoogleTexto: { color: '#333', fontWeight: 'bold', fontSize: 16 },
-  cadastro: { color: '#ffffff', marginTop: 20, fontSize: 14 },
+  cadastro: { color: '#ffffff', marginTop: 20, fontSize: 14, textAlign: 'center' },
   link: { color: '#f0a500', fontWeight: 'bold' },
   ajuda: { color: '#999', marginTop: 12, fontSize: 13 },
 });
