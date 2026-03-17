@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../config-supabase';
+import { agendarNotificacao30min, enviarNotificacaoLocal } from './notificacoes-config';
 
 export default function Profissional() {
   const [pedidos, setPedidos] = useState([]);
@@ -30,8 +31,10 @@ export default function Profissional() {
     }
   }
 
-  async function aceitar(cliente_id: number) {
+  async function aceitar(cliente_id: number, horario: string) {
     await supabase.from('pedidos').update({ status: 'aceito' }).eq('cliente_id', cliente_id);
+    await enviarNotificacaoLocal('Pedido aceito!', 'Uma profissional aceitou seu pedido e esta a caminho!');
+    await agendarNotificacao30min(horario);
     buscarPedidos();
   }
 
@@ -75,7 +78,7 @@ export default function Profissional() {
                   <TouchableOpacity style={styles.botaoRecusar} onPress={() => recusar(p.cliente_id)}>
                     <Text style={styles.botaoRecusarTexto}>Recusar</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.botaoAceitar} onPress={() => aceitar(p.cliente_id)}>
+                  <TouchableOpacity style={styles.botaoAceitar} onPress={() => aceitar(p.cliente_id, p.horario)}>
                     <Text style={styles.botaoAceitarTexto}>Aceitar</Text>
                   </TouchableOpacity>
                 </View>
