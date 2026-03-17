@@ -21,7 +21,6 @@ export default function Timer() {
   const minutos = Math.floor(segundos / 60);
   const segs = segundos % 60;
   const porcentagem = (segundos / 600) * 100;
-
   const corTimer = segundos > 300 ? '#00cc66' : segundos > 120 ? '#f0a500' : '#ff4444';
 
   if (aceito) {

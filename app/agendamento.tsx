@@ -22,9 +22,9 @@ const horarios = [
 export default function Agendamento() {
   const router = useRouter();
   const [diaSelecionado, setDiaSelecionado] = useState('');
-  const [selecionados, setSelecionados] = useState([]);
+  const [selecionados, setSelecionados] = useState<string[]>([]);
 
-  function toggleHorario(h) {
+  function toggleHorario(h: string) {
     setSelecionados((prev) =>
       prev.includes(h) ? prev.filter((x) => x !== h) : [...prev, h]
     );
@@ -42,8 +42,8 @@ export default function Agendamento() {
               style={diaSelecionado === d.data ? styles.diaAtivo : styles.diaInativo}
               onPress={() => setDiaSelecionado(d.data)}
             >
-              <Text style={diaSelecionado === d.data ? styles.diaTextoAtivo : styles.diaTexto}>{d.dia}</Text>
-              <Text style={diaSelecionado === d.data ? styles.diaTextoAtivo : styles.diaTexto}>{d.data}</Text>
+              <Text style={diaSelecionado === d.data ? styles.textoSelecionado : styles.diaTexto}>{d.dia}</Text>
+              <Text style={diaSelecionado === d.data ? styles.textoSelecionado : styles.diaTexto}>{d.data}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
   diaInativo: { borderWidth: 2, borderColor: '#2d1b4e', borderRadius: 12, padding: 12, marginRight: 10, alignItems: 'center', width: 70 },
   diaAtivo: { borderWidth: 2, borderColor: '#f0a500', borderRadius: 12, padding: 12, marginRight: 10, alignItems: 'center', width: 70, backgroundColor: '#2d1b4e' },
   diaTexto: { fontSize: 14, fontWeight: 'bold', color: '#999' },
-  diaTextoAtivo: { fontSize: 14, fontWeight: 'bold', color: '#f0a500' },
+  textoSelecionado: { fontSize: 14, fontWeight: 'bold', color: '#f0a500' },
   label: { fontSize: 15, color: '#ffffff', marginBottom: 15 },
   grade: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 30 },
   hInativo: { backgroundColor: '#2d1b4e', borderRadius: 20, paddingVertical: 10, paddingHorizontal: 14, margin: 5 },
