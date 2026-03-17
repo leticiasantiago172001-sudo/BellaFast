@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { enderecoParaCoordenadas } from '../config-maps';
 
 const dias = [
   { dia: 'SEG', data: '17/03' },
@@ -23,6 +24,8 @@ export default function Agendamento() {
   const router = useRouter();
   const [diaSelecionado, setDiaSelecionado] = useState('');
   const [selecionados, setSelecionados] = useState<string[]>([]);
+  const [endereco, setEndereco] = useState('');
+  const [carregando, setCarregando] = useState(false);
 
   function toggleHorario(h: string) {
     setSelecionados((prev) =>
@@ -30,11 +33,52 @@ export default function Agendamento() {
     );
   }
 
+  async function continuar() {
+    if (!endereco) {
+      Alert.alert('Erro', 'Por favor informe o endereco do atendimento!');
+      return;
+    }
+    if (!diaSelecionado) {
+      Alert.alert('Erro', 'Por favor selecione um dia!');
+      return;
+    }
+    if (selecionados.length === 0) {
+      Alert.alert('Erro', 'Por favor selecione um horario!');
+      return;
+    }
+
+    setCarregando(true);
+    try {
+      const coords = await enderecoParaCoordenadas(endereco);
+      if (coords) {
+        console.log('Coordenadas:', coords.latitude, coords.longitude);
+      }
+      router.push('/pagamento');
+    } catch (e) {
+      console.log('Erro:', e);
+      router.push('/pagamento');
+    } finally {
+      setCarregando(false);
+    }
+  }
+
   return (
     <ScrollView style={styles.scroll}>
       <View style={styles.container}>
         <Text style={styles.titulo}>Agendamento</Text>
 
+        <Text style={styles.label}>Endereco do atendimento</Text>
+        <Text style={styles.dica}>Coloque o endereco onde voce quer ser atendida</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Rua, numero, bairro, cidade"
+          placeholderTextColor="#999"
+          value={endereco}
+          onChangeText={setEndereco}
+          multiline={false}
+        />
+
+        <Text style={styles.label}>Selecione um dia</Text>
         <ScrollView horizontal={true} showsHorizontalScrollIndicator={false} style={styles.diasScroll}>
           {dias.map((d) => (
             <TouchableOpacity
@@ -61,8 +105,8 @@ export default function Agendamento() {
           ))}
         </View>
 
-        <TouchableOpacity style={styles.botao} onPress={() => router.push('/pagamento')}>
-          <Text style={styles.botaoTexto}>Continuar</Text>
+        <TouchableOpacity style={styles.botao} onPress={continuar} disabled={carregando}>
+          <Text style={styles.botaoTexto}>{carregando ? 'Processando...' : 'Continuar'}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -73,12 +117,14 @@ const styles = StyleSheet.create({
   scroll: { backgroundColor: '#1a0a2e' },
   container: { padding: 20, paddingTop: 60 },
   titulo: { fontSize: 26, fontWeight: 'bold', color: '#f0a500', marginBottom: 20 },
+  label: { fontSize: 15, color: '#ffffff', marginBottom: 5, fontWeight: 'bold' },
+  dica: { fontSize: 12, color: '#999', marginBottom: 10 },
+  input: { width: '100%', backgroundColor: '#2d1b4e', borderRadius: 10, padding: 15, color: '#ffffff', marginBottom: 20, fontSize: 16 },
   diasScroll: { marginBottom: 25 },
   diaInativo: { borderWidth: 2, borderColor: '#2d1b4e', borderRadius: 12, padding: 12, marginRight: 10, alignItems: 'center', width: 70 },
   diaAtivo: { borderWidth: 2, borderColor: '#f0a500', borderRadius: 12, padding: 12, marginRight: 10, alignItems: 'center', width: 70, backgroundColor: '#2d1b4e' },
   diaTexto: { fontSize: 14, fontWeight: 'bold', color: '#999' },
   textoSelecionado: { fontSize: 14, fontWeight: 'bold', color: '#f0a500' },
-  label: { fontSize: 15, color: '#ffffff', marginBottom: 15 },
   grade: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 30 },
   hInativo: { backgroundColor: '#2d1b4e', borderRadius: 20, paddingVertical: 10, paddingHorizontal: 14, margin: 5 },
   hAtivo: { backgroundColor: '#2d1b4e', borderRadius: 20, paddingVertical: 10, paddingHorizontal: 14, margin: 5, borderWidth: 2, borderColor: '#f0a500' },
