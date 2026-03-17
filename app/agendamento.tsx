@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -46,13 +47,17 @@ export default function Agendamento() {
       Alert.alert('Erro', 'Por favor selecione um horario!');
       return;
     }
-
     setCarregando(true);
     try {
       const coords = await enderecoParaCoordenadas(endereco);
-      if (coords) {
-        console.log('Coordenadas:', coords.latitude, coords.longitude);
-      }
+      const dadosPedido = {
+        endereco,
+        data: diaSelecionado,
+        horario: selecionados[0],
+        latitude: coords ? coords.latitude : null,
+        longitude: coords ? coords.longitude : null,
+      };
+      await AsyncStorage.setItem('pedido_atual', JSON.stringify(dadosPedido));
       router.push('/pagamento');
     } catch (e) {
       console.log('Erro:', e);
@@ -75,7 +80,6 @@ export default function Agendamento() {
           placeholderTextColor="#999"
           value={endereco}
           onChangeText={setEndereco}
-          multiline={false}
         />
 
         <Text style={styles.label}>Selecione um dia</Text>

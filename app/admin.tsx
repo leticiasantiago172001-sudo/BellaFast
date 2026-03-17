@@ -4,8 +4,8 @@ import { supabase } from '../config-supabase';
 
 export default function Admin() {
   const [aba, setAba] = useState('dashboard');
-  const [pedidos, setPedidos] = useState([]);
-  const [usuarios, setUsuarios] = useState([]);
+  const [pedidos, setPedidos] = useState<any[]>([]);
+  const [usuarios, setUsuarios] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
@@ -14,15 +14,8 @@ export default function Admin() {
 
   async function buscarDados() {
     try {
-      const { data: pedidosData } = await supabase
-        .from('pedidos')
-        .select('*')
-        .order('cliente_id', { ascending: false });
-
-      const { data: usuariosData } = await supabase
-        .from('usuarios')
-        .select('*');
-
+      const { data: pedidosData } = await supabase.from('pedidos').select('*').order('cliente_id', { ascending: false });
+      const { data: usuariosData } = await supabase.from('usuarios').select('*');
       setPedidos(pedidosData || []);
       setUsuarios(usuariosData || []);
     } catch (e) {
@@ -34,7 +27,6 @@ export default function Admin() {
 
   const pedidosPendentes = pedidos.filter((p) => p.status === 'pendente');
   const pedidosAceitos = pedidos.filter((p) => p.status === 'aceito');
-  const pedidosConcluidos = pedidos.filter((p) => p.status === 'concluido');
   const faturamentoTotal = pedidos.reduce((t, p) => t + parseFloat(p.valor || 0), 0);
   const comissao = faturamentoTotal * 0.20;
 
@@ -48,7 +40,6 @@ export default function Admin() {
   return (
     <ScrollView style={styles.scroll}>
       <View style={styles.container}>
-
         <Text style={styles.titulo}>Painel Admin</Text>
         <Text style={styles.subtitulo}>BellaFast</Text>
 
@@ -84,7 +75,6 @@ export default function Admin() {
                 <Text style={styles.statLabel}>Clientes</Text>
               </View>
             </View>
-
             <Text style={styles.secao}>Ultimos pedidos</Text>
             {carregando && <Text style={styles.carregando}>Carregando...</Text>}
             {pedidos.slice(0, 5).map((p, index) => (
@@ -129,9 +119,7 @@ export default function Admin() {
                 <Text style={styles.info}>Tel: {u.telefone}</Text>
               </View>
             ))}
-            {usuarios.length === 0 && !carregando && (
-              <Text style={styles.vazio}>Nenhum cliente cadastrado</Text>
-            )}
+            {usuarios.length === 0 && !carregando && <Text style={styles.vazio}>Nenhum cliente cadastrado</Text>}
           </View>
         )}
 

@@ -1,26 +1,36 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../config-supabase';
 
 export default function Confirmacao() {
   const router = useRouter();
+  const [dadosPedido, setDadosPedido] = useState<any>(null);
 
   useEffect(() => {
-    salvarPedido();
+    carregarESalvar();
   }, []);
 
-  async function salvarPedido() {
+  async function carregarESalvar() {
     try {
-      await supabase.from('pedidos').insert({
-        servico: 'Manicure simples',
-        data: '17/03',
-        horario: '09:00',
-        endereco: 'Rua das Flores, 123',
-        valor: 45.00,
-        status: 'pendente',
-        metodo_pagamento: 'pix',
-      });
+      const dados = await AsyncStorage.getItem('pedido_atual');
+      if (dados) {
+        const pedido = JSON.parse(dados);
+        setDadosPedido(pedido);
+        await supabase.from('pedidos').insert({
+          servico: 'Manicure simples',
+          data: pedido.data,
+          horario: pedido.horario,
+          endereco: pedido.endereco,
+          latitude: pedido.latitude,
+          longitude: pedido.longitude,
+          valor: 45.00,
+          status: 'pendente',
+          metodo_pagamento: 'pix',
+        });
+        await AsyncStorage.removeItem('pedido_atual');
+      }
     } catch (e) {
       console.log('Erro:', e);
     }
@@ -31,7 +41,6 @@ export default function Confirmacao() {
       <Text style={styles.icone}>🎉</Text>
       <Text style={styles.titulo}>Pedido confirmado!</Text>
       <Text style={styles.subtitulo}>Sua solicitacao foi enviada com sucesso!</Text>
-
       <View style={styles.card}>
         <Text style={styles.cardTitulo}>Detalhes do pedido</Text>
         <View style={styles.linha}>
@@ -39,8 +48,12 @@ export default function Confirmacao() {
           <Text style={styles.valor}>Manicure simples</Text>
         </View>
         <View style={styles.linha}>
+          <Text style={styles.label}>Endereco</Text>
+          <Text style={styles.valor}>{dadosPedido ? dadosPedido.endereco : '...'}</Text>
+        </View>
+        <View style={styles.linha}>
           <Text style={styles.label}>Data</Text>
-          <Text style={styles.valor}>17/03 as 09:00</Text>
+          <Text style={styles.valor}>{dadosPedido ? dadosPedido.data : '...'} as {dadosPedido ? dadosPedido.horario : '...'}</Text>
         </View>
         <View style={styles.linha}>
           <Text style={styles.label}>Pagamento</Text>
@@ -56,11 +69,7 @@ export default function Confirmacao() {
           <Text style={styles.totalValor}>R$ 45,00</Text>
         </View>
       </View>
-
-      <Text style={styles.aviso}>
-        Uma profissional proxima de voce vai aceitar seu pedido em breve!
-      </Text>
-
+      <Text style={styles.aviso}>Estamos buscando a profissional mais proxima de voce!</Text>
       <TouchableOpacity style={styles.botao} onPress={() => router.push('/servicos')}>
         <Text style={styles.botaoTexto}>Voltar para inicio</Text>
       </TouchableOpacity>
@@ -77,7 +86,7 @@ const styles = StyleSheet.create({
   cardTitulo: { fontSize: 16, fontWeight: 'bold', color: '#ffffff', marginBottom: 15 },
   linha: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   label: { color: '#999', fontSize: 14 },
-  valor: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
+  valor: { color: '#ffffff', fontSize: 14, fontWeight: 'bold', flex: 1, textAlign: 'right' },
   status: { color: '#f0a500', fontSize: 14, fontWeight: 'bold' },
   separador: { height: 1, backgroundColor: '#444', marginVertical: 10 },
   totalLabel: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },

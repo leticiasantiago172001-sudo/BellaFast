@@ -8,6 +8,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -30,8 +32,6 @@ export async function registrarNotificacoes() {
     return null;
   }
 
-  const token = (await Notifications.getExpoPushTokenAsync()).data;
-
   if (Platform.OS === 'android') {
     Notifications.setNotificationChannelAsync('default', {
       name: 'default',
@@ -40,7 +40,7 @@ export async function registrarNotificacoes() {
     });
   }
 
-  return token;
+  return 'token-local';
 }
 
 export async function salvarTokenUsuario(token: string) {
@@ -73,9 +73,8 @@ export async function agendarNotificacao30min(horario: string) {
   const agora = new Date();
   const atendimento = new Date();
   atendimento.setHours(horas, minutos, 0, 0);
-  
   const trintaMinutesAntes = new Date(atendimento.getTime() - 30 * 60 * 1000);
-  
+
   if (trintaMinutesAntes > agora) {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -83,7 +82,10 @@ export async function agendarNotificacao30min(horario: string) {
         body: 'Seu atendimento comeca em 30 minutos. Prepare-se!',
         sound: true,
       },
-      trigger: trintaMinutesAntes,
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: trintaMinutesAntes,
+      },
     });
   }
 }

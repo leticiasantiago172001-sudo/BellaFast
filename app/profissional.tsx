@@ -4,7 +4,7 @@ import { supabase } from '../config-supabase';
 import { agendarNotificacao30min, enviarNotificacaoLocal } from './notificacoes-config';
 
 export default function Profissional() {
-  const [pedidos, setPedidos] = useState([]);
+  const [pedidos, setPedidos] = useState<any[]>([]);
   const [aba, setAba] = useState('pedidos');
   const [carregando, setCarregando] = useState(true);
 
@@ -18,7 +18,6 @@ export default function Profissional() {
         .from('pedidos')
         .select('*')
         .order('cliente_id', { ascending: false });
-
       if (error) {
         console.log('Erro:', JSON.stringify(error));
       } else {
@@ -33,7 +32,7 @@ export default function Profissional() {
 
   async function aceitar(cliente_id: number, horario: string) {
     await supabase.from('pedidos').update({ status: 'aceito' }).eq('cliente_id', cliente_id);
-    await enviarNotificacaoLocal('Pedido aceito!', 'Uma profissional aceitou seu pedido e esta a caminho!');
+    await enviarNotificacaoLocal('Pedido aceito!', 'Uma profissional aceitou seu pedido!');
     await agendarNotificacao30min(horario);
     buscarPedidos();
   }
@@ -50,7 +49,6 @@ export default function Profissional() {
   return (
     <ScrollView style={styles.scroll}>
       <View style={styles.container}>
-
         <View style={styles.abas}>
           {['pedidos', 'agenda', 'ganhos', 'perfil'].map((a) => (
             <TouchableOpacity key={a} style={aba === a ? styles.abaAtiva : styles.abaInativa} onPress={() => setAba(a)}>
@@ -84,7 +82,6 @@ export default function Profissional() {
                 </View>
               </View>
             ))}
-
             <Text style={styles.secao}>Aceitos ({aceitos.length})</Text>
             {aceitos.map((p, index) => (
               <View key={index} style={styles.cardAceito}>
@@ -95,7 +92,6 @@ export default function Profissional() {
                 <Text style={styles.statusAceito}>Aceito ✅</Text>
               </View>
             ))}
-
             <Text style={styles.secao}>Concluidos ({concluidos.length})</Text>
             {concluidos.map((p, index) => (
               <View key={index} style={styles.cardConcluido}>
@@ -138,7 +134,6 @@ export default function Profissional() {
             </View>
           </View>
         )}
-
       </View>
     </ScrollView>
   );
