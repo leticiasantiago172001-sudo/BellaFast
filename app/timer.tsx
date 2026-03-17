@@ -10,15 +10,12 @@ export default function Timer() {
 
   useEffect(() => {
     if (aceito || recusado) return;
-    if (segundos === 0) {
-      setRecusado(true);
-      return;
-    }
+    if (segundos === 0) { setRecusado(true); return; }
     const timer = setTimeout(() => setSegundos(segundos - 1), 1000);
     return () => clearTimeout(timer);
   }, [segundos, aceito, recusado]);
 
-  const minutos = Math.floor(segundos / 60);
+  const minutos = Math.floor(segundos / 600);
   const segs = segundos % 60;
   const porcentagem = (segundos / 600) * 100;
   const corTimer = segundos > 300 ? '#00cc66' : segundos > 120 ? '#f0a500' : '#ff4444';
@@ -28,7 +25,7 @@ export default function Timer() {
       <View style={styles.container}>
         <Text style={styles.sucessoEmoji}>✅</Text>
         <Text style={styles.sucessoTitulo}>Pedido aceito!</Text>
-        <Text style={styles.sucessoDescricao}>Otimo! A cliente foi notificada. Prepare-se para o atendimento!</Text>
+        <Text style={styles.sucessoDescricao}>Otimo! A cliente foi notificada!</Text>
         <TouchableOpacity style={styles.botaoVerde} onPress={() => router.push('/esterilizacao')}>
           <Text style={styles.botaoVerdeTexto}>Ver detalhes do atendimento</Text>
         </TouchableOpacity>
@@ -41,7 +38,7 @@ export default function Timer() {
       <View style={styles.container}>
         <Text style={styles.falhaEmoji}>⏰</Text>
         <Text style={styles.falhaTitulo}>Tempo esgotado!</Text>
-        <Text style={styles.falhaDescricao}>O pedido foi enviado para outra profissional disponivel.</Text>
+        <Text style={styles.falhaDescricao}>O pedido foi enviado para outra profissional.</Text>
         <TouchableOpacity style={styles.botaoVoltar} onPress={() => router.push('/profissional')}>
           <Text style={styles.botaoVoltarTexto}>Voltar para pedidos</Text>
         </TouchableOpacity>
@@ -62,7 +59,7 @@ export default function Timer() {
       </View>
 
       <View style={styles.barraFundo}>
-        <View style={[styles.barraProgresso, { width: porcentagem + '%', backgroundColor: corTimer }]} />
+        <View style={[styles.barraProgresso, { width: porcentagem as any, backgroundColor: corTimer }]} />
       </View>
 
       <View style={styles.pedidoCard}>
@@ -74,10 +71,6 @@ export default function Timer() {
         <View style={styles.linha}>
           <Text style={styles.label}>Servico</Text>
           <Text style={styles.valor}>Manicure simples</Text>
-        </View>
-        <View style={styles.linha}>
-          <Text style={styles.label}>Data</Text>
-          <Text style={styles.valor}>17/03 as 09:00</Text>
         </View>
         <View style={styles.linha}>
           <Text style={styles.label}>Distancia</Text>
@@ -99,7 +92,7 @@ export default function Timer() {
       </View>
 
       {segundos <= 60 && (
-        <Text style={styles.avisoUrgente}>Menos de 1 minuto! O pedido sera repassado em breve!</Text>
+        <Text style={styles.avisoUrgente}>Menos de 1 minuto!</Text>
       )}
     </View>
   );
