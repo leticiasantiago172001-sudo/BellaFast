@@ -27,7 +27,45 @@ export default function Profissional() {
 
   useEffect(() => {
     buscarPedidos();
+    carregarPerfil();
   }, []);
+
+  async function carregarPerfil() {
+    try {
+      const { data: usuarioAuth } = await supabase.auth.getUser();
+      if (!usuarioAuth?.user) return;
+
+      const { data: usuario } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('email', usuarioAuth.user.email)
+        .single();
+
+      if (usuario) {
+        setNome(usuario.nome || '');
+        setTelefone(usuario.telefone || '');
+        if (usuario.foto_url) {
+          setFoto(usuario.foto_url + '?t=' + Date.now());
+        }
+      }
+
+      const { data: profissional } = await supabase
+        .from('profissionais')
+        .select('*')
+        .eq('usuario_id', usuarioAuth.user.id)
+        .single();
+
+      if (profissional) {
+        setEndereco(profissional.endereco_completo || '');
+        setRaio(String(profissional.raio_atendimento || 10));
+        if (profissional.especialidades) {
+          setCategoriasSelecionadas(profissional.especialidades.split(', ').filter(Boolean));
+        }
+      }
+    } catch (e) {
+      console.log('Erro ao carregar perfil:', e);
+    }
+  }
 
   async function buscarPedidos() {
     try {
@@ -78,25 +116,65 @@ export default function Profissional() {
       quality: 0.5,
     });
     if (!resultado.canceled) {
-      setFoto(resultado.assets[0].uri);
+      const uri = resultado.assets[0].uri;
+      setFoto(uri);
+      await uploadFoto(uri);
+    }
+  }
+
+  async function uploadFoto(uri: string) {
+    try {
+      const { data: usuarioAuth } = await supabase.auth.getUser();
+      if (!usuarioAuth?.user) return;
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const fileName = `${usuarioAuth.user.id}.jpg`;
+      const { error } = await supabase.storage
+        .from('fotos-perfil')
+        .upload(fileName, blob, { upsert: true, contentType: 'image/jpeg' });
+      if (!error) {
+        const { data } = supabase.storage.from('fotos-perfil').getPublicUrl(fileName);
+        await supabase.from('usuarios').update({ foto_url: data.publicUrl }).eq('email', usuarioAuth.user.email);
+        setFoto(data.publicUrl + '?t=' + Date.now());
+      }
+    } catch (e) {
+      console.log('Erro upload foto:', e);
     }
   }
 
   async function salvarPerfil() {
     try {
-      const { data: usuario } = await supabase.auth.getUser();
-      if (usuario?.user) {
-        await supabase.from('usuarios').update({ nome, telefone }).eq('email', usuario.user.email);
-        await supabase.from('profissionais').update({
+      const { data: usuarioAuth } = await supabase.auth.getUser();
+      if (!usuarioAuth?.user) {
+        Alert.alert('Erro', 'Usuario nao encontrado!');
+        return;
+      }
+
+      await supabase
+        .from('usuarios')
+        .update({ nome, telefone })
+        .eq('email', usuarioAuth.user.email);
+
+      const { error: erroProfissional } = await supabase
+        .from('profissionais')
+        .update({
           especialidades: categoriasSelecionadas.join(', '),
           endereco_completo: endereco,
           raio_atendimento: parseInt(raio),
-        }).eq('usuario_id', usuario.user.id);
+        })
+        .eq('usuario_id', usuarioAuth.user.id);
+
+      if (erroProfissional) {
+        console.log('Erro ao salvar profissional:', JSON.stringify(erroProfissional));
+        Alert.alert('Erro', 'Nao foi possivel salvar as especialidades!');
+        return;
       }
+
       Alert.alert('Sucesso!', 'Perfil atualizado!');
       setEditando(false);
+      carregarPerfil();
     } catch (e) {
-      Alert.alert('Erro', 'Nao foi possivel salvar!');
+      Alert.alert('Erro', String(e));
     }
   }
 
@@ -107,7 +185,6 @@ export default function Profissional() {
   return (
     <ScrollView style={styles.scroll}>
       <View style={styles.container}>
-
         <View style={styles.abas}>
           {['pedidos', 'agenda', 'ganhos', 'perfil'].map((a) => (
             <TouchableOpacity key={a} style={aba === a ? styles.abaAtiva : styles.abaInativa} onPress={() => setAba(a)}>
@@ -186,7 +263,11 @@ export default function Profissional() {
               <TouchableOpacity onPress={escolherFoto}>
                 <View style={styles.perfilFoto}>
                   {foto ? (
-                    <Image source={{ uri: foto }} style={{ width: 100, height: 100, borderRadius: 50 }} />
+                    <Image
+                      source={{ uri: foto }}
+                      style={{ width: 100, height: 100, borderRadius: 50 }}
+                      onError={() => console.log('Erro ao carregar foto')}
+                    />
                   ) : (
                     <Text style={styles.perfilFotoTexto}>👩</Text>
                   )}
@@ -299,7 +380,7 @@ const styles = StyleSheet.create({
   faturamentoValor: { color: '#f0a500', fontSize: 36, fontWeight: 'bold' },
   faturamentoSub: { color: '#999', fontSize: 13, marginTop: 5 },
   perfilFotoContainer: { alignItems: 'center', marginBottom: 20 },
-  perfilFoto: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#2d1b4e', alignItems: 'center', justifyContent: 'center', marginBottom: 10, borderWidth: 3, borderColor: '#f0a500' },
+  perfilFoto: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#2d1b4e', alignItems: 'center', justifyContent: 'center', marginBottom: 10, borderWidth: 3, borderColor: '#f0a500', overflow: 'hidden' },
   perfilFotoTexto: { fontSize: 50 },
   botaoFoto: { backgroundColor: '#2d1b4e', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: '#f0a500' },
   botaoFotoTexto: { color: '#f0a500', fontSize: 13, fontWeight: 'bold' },
