@@ -40,6 +40,18 @@ export default function Pagamento() {
       if (auth?.user) {
         const { data: user } = await supabase.from('usuarios').select('*').eq('email', auth.user.email).single();
         setUsuario(user);
+
+        // Busca profissional aprovada com recipient_id para o split
+        const { data: prof } = await supabase
+          .from('profissionais')
+          .select('id, recipient_id')
+          .eq('status', 'aprovado')
+          .not('recipient_id', 'is', null)
+          .limit(1)
+          .single();
+        if (prof?.recipient_id) {
+          setDadosPedido((prev: any) => ({ ...prev, recipient_id_profissional: prof.recipient_id }));
+        }
       }
     } catch (e) {
       console.log('Erro:', e);
@@ -103,6 +115,7 @@ export default function Pagamento() {
           token,
           email: usuario?.email || 'cliente@bellafast.com',
           nome: usuario?.nome || 'Cliente',
+          recipient_id_profissional: dadosPedido?.recipient_id_profissional || null,
         },
       });
       if (error || !data?.success) throw new Error(data?.message || 'Pagamento recusado');
@@ -125,6 +138,7 @@ export default function Pagamento() {
           nome: usuario?.nome || 'Cliente',
           cpf: usuario?.cpf || '52998224725',
           telefone: usuario?.telefone || '',
+          recipient_id_profissional: dadosPedido?.recipient_id_profissional || null,
         },
       });
       if (error) throw new Error(error.message || JSON.stringify(error));

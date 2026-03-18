@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { enderecoParaCoordenadas } from '../config-maps';
 import { supabase } from '../config-supabase';
 
@@ -39,6 +39,19 @@ export default function CadastroProfissional() {
   const [conta, setConta] = useState('');
   const [digitoConta, setDigitoConta] = useState('');
   const [tipoConta, setTipoConta] = useState<'corrente' | 'poupanca'>('corrente');
+
+  const refEmail = useRef<TextInput>(null);
+  const refSenha = useRef<TextInput>(null);
+  const refTelefone = useRef<TextInput>(null);
+  const refNumero = useRef<TextInput>(null);
+  const refBairro = useRef<TextInput>(null);
+  const refRaio = useRef<TextInput>(null);
+  const refCpf = useRef<TextInput>(null);
+  const refRazaoSocial = useRef<TextInput>(null);
+  const refBanco = useRef<TextInput>(null);
+  const refAgencia = useRef<TextInput>(null);
+  const refConta = useRef<TextInput>(null);
+  const refDigito = useRef<TextInput>(null);
 
   function toggleCategoria(id: string) {
     setCategoriasSelecionadas((prev) =>
@@ -185,15 +198,16 @@ export default function CadastroProfissional() {
   }
 
   return (
-    <ScrollView style={styles.scroll}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+    <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
       <View style={styles.container}>
         <Text style={styles.logo}>BellaFast</Text>
         <Text style={styles.titulo}>Cadastro Profissional</Text>
 
-        <TextInput style={styles.input} placeholder="Seu nome completo" placeholderTextColor="#CBB8A6" value={nome} onChangeText={setNome} />
-        <TextInput style={styles.input} placeholder="Seu email" placeholderTextColor="#CBB8A6" keyboardType="email-address" value={email} onChangeText={setEmail} />
-        <TextInput style={styles.input} placeholder="Crie uma senha" placeholderTextColor="#CBB8A6" secureTextEntry={true} value={senha} onChangeText={setSenha} />
-        <TextInput style={styles.input} placeholder="Seu telefone" placeholderTextColor="#CBB8A6" keyboardType="phone-pad" value={telefone} onChangeText={setTelefone} />
+        <TextInput style={styles.input} placeholder="Seu nome completo" placeholderTextColor="#CBB8A6" value={nome} onChangeText={setNome} returnKeyType="next" onSubmitEditing={() => refEmail.current?.focus()} blurOnSubmit={false} />
+        <TextInput ref={refEmail} style={styles.input} placeholder="Seu email" placeholderTextColor="#CBB8A6" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} returnKeyType="next" onSubmitEditing={() => refSenha.current?.focus()} blurOnSubmit={false} />
+        <TextInput ref={refSenha} style={styles.input} placeholder="Crie uma senha" placeholderTextColor="#CBB8A6" secureTextEntry={true} value={senha} onChangeText={setSenha} returnKeyType="next" onSubmitEditing={() => refTelefone.current?.focus()} blurOnSubmit={false} />
+        <TextInput ref={refTelefone} style={styles.input} placeholder="Seu telefone" placeholderTextColor="#CBB8A6" keyboardType="phone-pad" value={telefone} onChangeText={setTelefone} returnKeyType="next" blurOnSubmit={false} />
 
         <Text style={styles.label}>Endereco da sua casa</Text>
         <Text style={styles.dica}>Digite seu CEP para preencher automaticamente</Text>
@@ -207,18 +221,21 @@ export default function CadastroProfissional() {
             maxLength={9}
             value={cep}
             onChangeText={buscarCep}
+            returnKeyType="next"
+            onSubmitEditing={() => refNumero.current?.focus()}
+            blurOnSubmit={false}
           />
           {buscandoCep && <Text style={styles.buscando}>Buscando...</Text>}
         </View>
 
-        <TextInput style={styles.input} placeholder="Rua" placeholderTextColor="#CBB8A6" value={rua} onChangeText={setRua} />
-        <TextInput style={styles.input} placeholder="Numero" placeholderTextColor="#CBB8A6" keyboardType="numeric" value={numero} onChangeText={setNumero} />
-        <TextInput style={styles.input} placeholder="Bairro" placeholderTextColor="#CBB8A6" value={bairro} onChangeText={setBairro} />
+        <TextInput style={styles.input} placeholder="Rua" placeholderTextColor="#CBB8A6" value={rua} onChangeText={setRua} returnKeyType="next" onSubmitEditing={() => refNumero.current?.focus()} blurOnSubmit={false} />
+        <TextInput ref={refNumero} style={styles.input} placeholder="Numero" placeholderTextColor="#CBB8A6" keyboardType="numeric" value={numero} onChangeText={setNumero} returnKeyType="next" onSubmitEditing={() => refBairro.current?.focus()} blurOnSubmit={false} />
+        <TextInput ref={refBairro} style={styles.input} placeholder="Bairro" placeholderTextColor="#CBB8A6" value={bairro} onChangeText={setBairro} returnKeyType="next" onSubmitEditing={() => refRaio.current?.focus()} blurOnSubmit={false} />
         <TextInput style={[styles.input, styles.inputDesabilitado]} placeholder="Cidade" placeholderTextColor="#CBB8A6" value={cidade} editable={false} />
         <TextInput style={[styles.input, styles.inputDesabilitado]} placeholder="Estado" placeholderTextColor="#CBB8A6" value={estado} editable={false} />
 
         <Text style={styles.label}>Raio de atendimento (km)</Text>
-        <TextInput style={styles.input} placeholder="10" placeholderTextColor="#CBB8A6" keyboardType="numeric" value={raio} onChangeText={setRaio} />
+        <TextInput ref={refRaio} style={styles.input} placeholder="10" placeholderTextColor="#CBB8A6" keyboardType="numeric" value={raio} onChangeText={setRaio} returnKeyType="done" />
 
         <Text style={styles.label}>Suas especialidades</Text>
         <Text style={styles.dica}>Selecione todas que se aplicam</Text>
@@ -279,10 +296,11 @@ export default function CadastroProfissional() {
         </View>
 
         {tipoDocumento === 'cnpj' && (
-          <TextInput style={styles.input} placeholder="Razao social da empresa" placeholderTextColor="#CBB8A6" value={razaoSocial} onChangeText={setRazaoSocial} />
+          <TextInput ref={refRazaoSocial} style={styles.input} placeholder="Razao social da empresa" placeholderTextColor="#CBB8A6" value={razaoSocial} onChangeText={setRazaoSocial} returnKeyType="next" onSubmitEditing={() => refCpf.current?.focus()} blurOnSubmit={false} />
         )}
 
         <TextInput
+          ref={refCpf}
           style={styles.input}
           placeholder={tipoDocumento === 'cpf' ? '000.000.000-00' : '00.000.000/0001-00'}
           placeholderTextColor="#CBB8A6"
@@ -290,17 +308,20 @@ export default function CadastroProfissional() {
           maxLength={tipoDocumento === 'cpf' ? 14 : 18}
           value={cpf}
           onChangeText={setCpf}
+          returnKeyType="next"
+          onSubmitEditing={() => refBanco.current?.focus()}
+          blurOnSubmit={false}
         />
 
         <Text style={styles.label}>Dados bancarios para receber pagamentos</Text>
         <Text style={styles.dica}>Voce recebera 80% de cada servico realizado</Text>
 
-        <TextInput style={styles.input} placeholder="Codigo do banco (ex: 341 para Itau)" placeholderTextColor="#CBB8A6" keyboardType="numeric" maxLength={5} value={banco} onChangeText={setBanco} />
-        <TextInput style={styles.input} placeholder="Agencia (sem digito)" placeholderTextColor="#CBB8A6" keyboardType="numeric" maxLength={6} value={agencia} onChangeText={setAgencia} />
+        <TextInput ref={refBanco} style={styles.input} placeholder="Codigo do banco (ex: 341 para Itau)" placeholderTextColor="#CBB8A6" keyboardType="numeric" maxLength={5} value={banco} onChangeText={setBanco} returnKeyType="next" onSubmitEditing={() => refAgencia.current?.focus()} blurOnSubmit={false} />
+        <TextInput ref={refAgencia} style={styles.input} placeholder="Agencia (sem digito)" placeholderTextColor="#CBB8A6" keyboardType="numeric" maxLength={6} value={agencia} onChangeText={setAgencia} returnKeyType="next" onSubmitEditing={() => refConta.current?.focus()} blurOnSubmit={false} />
 
         <View style={styles.cepRow}>
-          <TextInput style={[styles.input, { flex: 1, marginRight: 10 }]} placeholder="Numero da conta" placeholderTextColor="#CBB8A6" keyboardType="numeric" maxLength={12} value={conta} onChangeText={setConta} />
-          <TextInput style={[styles.input, { width: 70 }]} placeholder="Digito" placeholderTextColor="#CBB8A6" keyboardType="numeric" maxLength={2} value={digitoConta} onChangeText={setDigitoConta} />
+          <TextInput ref={refConta} style={[styles.input, { flex: 1, marginRight: 10 }]} placeholder="Numero da conta" placeholderTextColor="#CBB8A6" keyboardType="numeric" maxLength={12} value={conta} onChangeText={setConta} returnKeyType="next" onSubmitEditing={() => refDigito.current?.focus()} blurOnSubmit={false} />
+          <TextInput ref={refDigito} style={[styles.input, { width: 70 }]} placeholder="Digito" placeholderTextColor="#CBB8A6" keyboardType="numeric" maxLength={2} value={digitoConta} onChangeText={setDigitoConta} returnKeyType="done" />
         </View>
 
         <Text style={styles.label}>Tipo de conta</Text>
@@ -328,6 +349,7 @@ export default function CadastroProfissional() {
         </TouchableOpacity>
       </View>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

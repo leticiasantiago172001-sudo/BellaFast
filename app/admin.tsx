@@ -77,13 +77,13 @@ export default function Admin() {
   }
 
   async function aprovarProfissional(id: string) {
-    await supabase.from('profissionais').update({ aprovado: true }).eq('usuario_id', id);
+    await supabase.from('profissionais').update({ status: 'aprovado' }).eq('usuario_id', id);
     carregarDados();
     Alert.alert('Profissional aprovada!');
   }
 
   async function bloquearProfissional(id: string) {
-    await supabase.from('profissionais').update({ aprovado: false }).eq('usuario_id', id);
+    await supabase.from('profissionais').update({ status: 'bloqueado' }).eq('usuario_id', id);
     carregarDados();
   }
 
@@ -95,7 +95,7 @@ export default function Admin() {
     .reduce((t, p) => t + parseFloat(p.valor || 0), 0);
   const comissao = faturamento * 0.2;
   const pendentesCount = pedidos.filter((p) => p.status === 'pendente').length;
-  const profPendentes = profissionais.filter((p) => !p.aprovado).length;
+  const profPendentes = profissionais.filter((p) => p.status === 'em_analise').length;
 
   // Gráfico dias
   const pedidosPorDia: { [k: string]: number } = { DOM: 0, SEG: 0, TER: 0, QUA: 0, QUI: 0, SEX: 0, SAB: 0 };
@@ -347,7 +347,7 @@ export default function Admin() {
             )}
             {profissionais.length === 0 && <Text style={styles.vazio}>Nenhuma profissional cadastrada</Text>}
             {profissionais.map((p, i) => {
-              const aprovada = p.aprovado === true;
+              const aprovada = p.status === 'aprovado';
               const cli = clientes.find((c) => c.id === p.usuario_id);
               return (
                 <View key={i} style={styles.profCard}>
@@ -360,9 +360,9 @@ export default function Admin() {
                       <Text style={styles.profDetalhe}>{p.especialidades || 'Sem especialidades'}</Text>
                       <Text style={styles.profDetalhe}>Raio: {p.raio_atendimento || 10}km</Text>
                     </View>
-                    <View style={[styles.miniStatus, { backgroundColor: aprovada ? '#7BAE7F22' : '#CBB8A622' }]}>
-                      <Text style={[styles.miniStatusTexto, { color: aprovada ? '#7BAE7F' : '#CBB8A6' }]}>
-                        {aprovada ? 'Ativa' : 'Pendente'}
+                    <View style={[styles.miniStatus, { backgroundColor: aprovada ? '#7BAE7F22' : p.status === 'bloqueado' ? '#C0392B22' : '#CBB8A622' }]}>
+                      <Text style={[styles.miniStatusTexto, { color: aprovada ? '#7BAE7F' : p.status === 'bloqueado' ? '#C0392B' : '#CBB8A6' }]}>
+                        {aprovada ? 'Ativa' : p.status === 'bloqueado' ? 'Bloqueada' : 'Pendente'}
                       </Text>
                     </View>
                   </View>
