@@ -1,23 +1,72 @@
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { supabase } from '../config-supabase';
 
-const servicos = [
-  { id: 1, nome: 'Unhas', emoji: '💅', descricao: 'Manicure e pedicure', preco: 'A partir de R$ 45' },
-  { id: 2, nome: 'Cabelo', emoji: '✂️', descricao: 'Corte, escova', preco: 'A partir de R$ 80' },
-  { id: 3, nome: 'Massagem', emoji: '🌿', descricao: 'Relaxante e terapeutica', preco: 'A partir de R$ 120' },
-  { id: 4, nome: 'Depilacao', emoji: '✨', descricao: 'Cera e linha', preco: 'A partir de R$ 35' },
-  { id: 5, nome: 'Maquiagem', emoji: '💄', descricao: 'Social e artistica', preco: 'A partir de R$ 100' },
-  { id: 6, nome: 'Estetica', emoji: '🌸', descricao: 'Limpeza de pele', preco: 'A partir de R$ 90' },
-];
-
-const historico = [
-  { id: 1, servico: 'Manicure simples', profissional: 'Jessica Oliveira', data: '10/03', valor: 'R$ 45,00', nota: 5 },
-  { id: 2, servico: 'Escova', profissional: 'Camila Santos', data: '05/03', valor: 'R$ 60,00', nota: 5 },
-  { id: 3, servico: 'Limpeza de pele', profissional: 'Fernanda Lima', data: '28/02', valor: 'R$ 90,00', nota: 4 },
+const SERVICOS = [
+  { id: 'unhas', nome: 'Unhas', emoji: '💅', descricao: 'Manicure, pedicure e nail art' },
+  { id: 'cabelo', nome: 'Cabelo', emoji: '✂️', descricao: 'Corte, escova e coloracao' },
+  { id: 'massagem', nome: 'Massagem', emoji: '🌿', descricao: 'Relaxante e terapeutica' },
+  { id: 'depilacao', nome: 'Depilacao', emoji: '✨', descricao: 'Cera e linha' },
+  { id: 'maquiagem', nome: 'Maquiagem', emoji: '💄', descricao: 'Social e artistica' },
+  { id: 'estetica', nome: 'Estetica', emoji: '🌸', descricao: 'Limpeza de pele e mais' },
 ];
 
 export default function Servicos() {
   const router = useRouter();
+  const [pedidos, setPedidos] = useState<any[]>([]);
+  const [usuario, setUsuario] = useState<any>(null);
+  const [enderecos, setEnderecos] = useState<string[]>([]);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    carregarDados();
+  }, []);
+
+  async function carregarDados() {
+    try {
+      const { data: usuarioAuth } = await supabase.auth.getUser();
+      if (!usuarioAuth?.user) return;
+
+      const { data: usuarioData } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('email', usuarioAuth.user.email)
+        .single();
+
+      if (usuarioData) {
+        setUsuario(usuarioData);
+        const enderecosSalvos = usuarioData.enderecos ? JSON.parse(usuarioData.enderecos) : [];
+        setEnderecos(enderecosSalvos);
+      }
+
+      const { data: pedidosData } = await supabase
+        .from('pedidos')
+        .select('*')
+        .order('cliente_id', { ascending: false });
+
+      setPedidos(pedidosData || []);
+    } catch (e) {
+      console.log('Erro:', e);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  const pedidosAtivos = pedidos.filter((p) => p.status === 'pendente' || p.status === 'aceito');
+  const pedidosConcluidos = pedidos.filter((p) => p.status === 'concluido');
+
+  const corStatus = (s: string) => {
+    if (s === 'aceito') return '#7BAE7F';
+    if (s === 'pendente') return '#D4AF7F';
+    return '#C0392B';
+  };
+
+  const textoStatus = (s: string) => {
+    if (s === 'aceito') return 'Confirmado ✅';
+    if (s === 'pendente') return 'Aguardando ⏳';
+    return s;
+  };
 
   return (
     <ScrollView style={styles.scroll}>
@@ -25,59 +74,91 @@ export default function Servicos() {
 
         <View style={styles.header}>
           <View>
-            <Text style={styles.ola}>Ola, Leticia!</Text>
-            <Text style={styles.subtitulo}>O que voce quer hoje?</Text>
+            <Text style={styles.ola}>Ola, {usuario?.nome?.split(' ')[0] || 'Cliente'}! 👋</Text>
+            <Text style={styles.subtitulo}>O que deseja hoje?</Text>
           </View>
-          <TouchableOpacity style={styles.notifBotao} onPress={() => router.push('/notificacoes')}>
-            <Text style={styles.notifEmoji}>🔔</Text>
-            <View style={styles.notifBadge}>
-              <Text style={styles.notifBadgeTexto}>3</Text>
-            </View>
-          </TouchableOpacity>
+          <View style={styles.headerIcones}>
+            <TouchableOpacity style={styles.iconeBtn} onPress={() => router.push('/notificacoes')}>
+              <Text style={styles.icone}>🔔</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconeBtn} onPress={() => router.push('/perfil')}>
+              <Text style={styles.icone}>👤</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <TouchableOpacity style={styles.bannerPromo} onPress={() => router.push('/servicos')}>
-          <Text style={styles.bannerEmoji}>🎁</Text>
-          <View>
-            <Text style={styles.bannerTitulo}>Oferta especial!</Text>
-            <Text style={styles.bannerDescricao}>20% off em massagens essa semana</Text>
+        {enderecos.length > 0 && (
+          <View style={styles.enderecoCard}>
+            <Text style={styles.enderecoEmoji}>📍</Text>
+            <View style={styles.enderecoInfo}>
+              <Text style={styles.enderecoPadrao}>Endereco padrao</Text>
+              <Text style={styles.enderecoTexto} numberOfLines={1}>{enderecos[0]}</Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/perfil')}>
+              <Text style={styles.enderecoTrocar}>Trocar</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.bannerSeta}>›</Text>
-        </TouchableOpacity>
+        )}
+
+        {enderecos.length === 0 && (
+          <TouchableOpacity style={styles.adicionarEnderecoCard} onPress={() => router.push('/perfil')}>
+            <Text style={styles.adicionarEnderecoEmoji}>📍</Text>
+            <Text style={styles.adicionarEnderecoTexto}>Adicione um endereco no seu perfil!</Text>
+            <Text style={styles.adicionarEnderecoLink}>Adicionar →</Text>
+          </TouchableOpacity>
+        )}
 
         <Text style={styles.secao}>Servicos</Text>
-        <View style={styles.servicosGrid}>
-          {servicos.map((s) => (
+        <View style={styles.grid}>
+          {SERVICOS.map((s) => (
             <TouchableOpacity
               key={s.id}
               style={styles.servicoCard}
-              onPress={() => router.push({ pathname: '/detalhes', params: { servico: s.nome } })}
+              onPress={() => router.push({ pathname: '/detalhes', params: { servico: s.id, nome: s.nome, emoji: s.emoji } })}
             >
               <Text style={styles.servicoEmoji}>{s.emoji}</Text>
               <Text style={styles.servicoNome}>{s.nome}</Text>
-              <Text style={styles.servicoPreco}>{s.preco}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <Text style={styles.secao}>Seu historico</Text>
-        {historico.map((h) => (
-          <View key={h.id} style={styles.historicoCard}>
-            <View style={styles.row}>
-              <Text style={styles.historicoServico}>{h.servico}</Text>
-              <Text style={styles.historicoValor}>{h.valor}</Text>
-            </View>
-            <Text style={styles.historicoProfissional}>{h.profissional}</Text>
-            <View style={styles.row}>
-              <Text style={styles.historicoData}>{h.data}</Text>
-              <Text style={styles.historicoNota}>{'★'.repeat(h.nota)}</Text>
-            </View>
+        {pedidosAtivos.length > 0 && (
+          <View>
+            <Text style={styles.secao}>Pedidos em andamento</Text>
+            {pedidosAtivos.map((p, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.pedidoCard}
+                onPress={() => router.push('/acompanhamento')}
+              >
+                <View style={styles.pedidoHeader}>
+                  <Text style={styles.pedidoServico}>{p.servico}</Text>
+                  <Text style={[styles.pedidoStatus, { color: corStatus(p.status) }]}>{textoStatus(p.status)}</Text>
+                </View>
+                <Text style={styles.pedidoInfo}>📅 {p.data} {p.horario ? `as ${p.horario}` : ''}</Text>
+                <Text style={styles.pedidoInfo}>📍 {p.endereco}</Text>
+                {p.status === 'aceito' && (
+                  <View style={styles.profissionalConfirmada}>
+                    <Text style={styles.profissionalConfirmadaTexto}>✅ Confirmado para as {p.horario}!</Text>
+                    <Text style={styles.verDetalhes}>Toque para ver detalhes →</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
           </View>
-        ))}
+        )}
 
-        <TouchableOpacity style={styles.botaoAcompanhamento} onPress={() => router.push('/acompanhamento')}>
-          <Text style={styles.botaoAcompanhamentoTexto}>Ver pedido em andamento</Text>
-        </TouchableOpacity>
+        {pedidosConcluidos.length > 0 && (
+          <View>
+            <Text style={styles.secao}>Historico</Text>
+            {pedidosConcluidos.slice(0, 3).map((p, index) => (
+              <View key={index} style={styles.historicoCard}>
+                <Text style={styles.historicoServico}>{p.servico}</Text>
+                <Text style={styles.historicoInfo}>{p.data} • R$ {parseFloat(p.valor).toFixed(2).replace('.', ',')}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
       </View>
     </ScrollView>
@@ -85,33 +166,38 @@ export default function Servicos() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { backgroundColor: '#1a0a2e' },
+  scroll: { backgroundColor: '#E8DCCF' },
   container: { padding: 20, paddingTop: 60 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  ola: { fontSize: 26, fontWeight: 'bold', color: '#f0a500' },
-  subtitulo: { fontSize: 14, color: '#999', marginTop: 3 },
-  notifBotao: { position: 'relative', padding: 5 },
-  notifEmoji: { fontSize: 28 },
-  notifBadge: { position: 'absolute', top: 0, right: 0, backgroundColor: '#ff4444', borderRadius: 8, width: 16, height: 16, alignItems: 'center', justifyContent: 'center' },
-  notifBadgeTexto: { color: '#ffffff', fontSize: 10, fontWeight: 'bold' },
-  bannerPromo: { backgroundColor: '#2d1b4e', borderRadius: 15, padding: 15, flexDirection: 'row', alignItems: 'center', marginBottom: 25, borderWidth: 1, borderColor: '#f0a500' },
-  bannerEmoji: { fontSize: 30, marginRight: 12 },
-  bannerTitulo: { color: '#f0a500', fontWeight: 'bold', fontSize: 15 },
-  bannerDescricao: { color: '#999', fontSize: 13, marginTop: 2 },
-  bannerSeta: { color: '#f0a500', fontSize: 24, marginLeft: 'auto' },
-  secao: { fontSize: 18, fontWeight: 'bold', color: '#ffffff', marginBottom: 15 },
-  servicosGrid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 25 },
-  servicoCard: { backgroundColor: '#2d1b4e', borderRadius: 15, padding: 15, width: '30%', margin: '1.5%', alignItems: 'center' },
-  servicoEmoji: { fontSize: 30, marginBottom: 8 },
-  servicoNome: { color: '#ffffff', fontWeight: 'bold', fontSize: 13, textAlign: 'center' },
-  servicoPreco: { color: '#f0a500', fontSize: 11, textAlign: 'center', marginTop: 4 },
-  historicoCard: { backgroundColor: '#2d1b4e', borderRadius: 15, padding: 15, marginBottom: 12 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  historicoServico: { color: '#ffffff', fontWeight: 'bold', fontSize: 15 },
-  historicoValor: { color: '#f0a500', fontWeight: 'bold', fontSize: 15 },
-  historicoProfissional: { color: '#999', fontSize: 13, marginBottom: 5 },
-  historicoData: { color: '#666', fontSize: 13 },
-  historicoNota: { color: '#f0a500', fontSize: 14 },
-  botaoAcompanhamento: { backgroundColor: '#f0a500', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 10, marginBottom: 30 },
-  botaoAcompanhamentoTexto: { color: '#1a0a2e', fontWeight: 'bold', fontSize: 16 },
+  ola: { fontSize: 22, fontWeight: 'bold', color: '#6B4F3A' },
+  subtitulo: { fontSize: 13, color: '#CBB8A6', marginTop: 3 },
+  headerIcones: { flexDirection: 'row' },
+  iconeBtn: { backgroundColor: '#F7F3EF', borderRadius: 20, width: 40, height: 40, alignItems: 'center', justifyContent: 'center', marginLeft: 8, shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, elevation: 2 },
+  icone: { fontSize: 20 },
+  enderecoCard: { backgroundColor: '#F7F3EF', borderRadius: 12, padding: 12, marginBottom: 20, flexDirection: 'row', alignItems: 'center', shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  enderecoEmoji: { fontSize: 20, marginRight: 10 },
+  enderecoInfo: { flex: 1 },
+  enderecoPadrao: { color: '#D4AF7F', fontSize: 10, fontWeight: 'bold', marginBottom: 2 },
+  enderecoTexto: { color: '#6B4F3A', fontSize: 13 },
+  enderecoTrocar: { color: '#D4AF7F', fontSize: 12, fontWeight: 'bold' },
+  adicionarEnderecoCard: { backgroundColor: '#F7F3EF', borderRadius: 12, padding: 15, marginBottom: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#D4AF7F', borderStyle: 'dashed' },
+  adicionarEnderecoEmoji: { fontSize: 20, marginRight: 10 },
+  adicionarEnderecoTexto: { color: '#CBB8A6', fontSize: 13, flex: 1 },
+  adicionarEnderecoLink: { color: '#D4AF7F', fontWeight: 'bold', fontSize: 13 },
+  secao: { fontSize: 17, fontWeight: 'bold', color: '#6B4F3A', marginBottom: 12, marginTop: 5 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 25 },
+  servicoCard: { backgroundColor: '#F7F3EF', borderRadius: 15, padding: 20, width: '30%', margin: '1.5%', alignItems: 'center', shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  servicoEmoji: { fontSize: 32, marginBottom: 8 },
+  servicoNome: { color: '#6B4F3A', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
+  pedidoCard: { backgroundColor: '#F7F3EF', borderRadius: 15, padding: 15, marginBottom: 12, borderWidth: 2, borderColor: '#D4AF7F', shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  pedidoHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  pedidoServico: { color: '#6B4F3A', fontSize: 15, fontWeight: 'bold' },
+  pedidoStatus: { fontSize: 12, fontWeight: 'bold' },
+  pedidoInfo: { color: '#CBB8A6', fontSize: 13, marginBottom: 4 },
+  profissionalConfirmada: { backgroundColor: '#E8DCCF', borderRadius: 8, padding: 10, marginTop: 8 },
+  profissionalConfirmadaTexto: { color: '#7BAE7F', fontSize: 13, fontWeight: 'bold' },
+  verDetalhes: { color: '#D4AF7F', fontSize: 12, marginTop: 4 },
+  historicoCard: { backgroundColor: '#F7F3EF', borderRadius: 12, padding: 12, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1 },
+  historicoServico: { color: '#6B4F3A', fontSize: 14, fontWeight: 'bold' },
+  historicoInfo: { color: '#CBB8A6', fontSize: 12 },
 });

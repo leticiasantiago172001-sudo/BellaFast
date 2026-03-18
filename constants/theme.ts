@@ -5,25 +5,36 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
-
+// BellaFast — Paleta Oficial
 export const Colors = {
+  bege: '#E8DCCF',         // Cor principal — fundo geral
+  offWhite: '#F7F3EF',     // Cor neutra — cards e inputs
+  marrom: '#6B4F3A',       // Cor secundária — texto principal
+  dourado: '#D4AF7F',      // Cor de destaque — accent, botões
+  begeEscuro: '#CBB8A6',   // Cor de apoio — texto secundário
+  marromEscuro: '#4A3020', // Texto sobre botões dourados
+  sucesso: '#7BAE7F',      // Verde suave
+  erro: '#C0392B',         // Vermelho escuro
+  taxa: '#B5651D',         // Laranja escuro (taxas/urgência)
+  distancia: '#7B9BB5',    // Azul suave (distância/tempo)
+  separador: '#D9CEC5',    // Bordas e separadores
+
+  // Aliases para compatibilidade com hooks existentes
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    text: '#6B4F3A',
+    background: '#E8DCCF',
+    tint: '#D4AF7F',
+    icon: '#CBB8A6',
+    tabIconDefault: '#CBB8A6',
+    tabIconSelected: '#D4AF7F',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    text: '#6B4F3A',
+    background: '#E8DCCF',
+    tint: '#D4AF7F',
+    icon: '#CBB8A6',
+    tabIconDefault: '#CBB8A6',
+    tabIconSelected: '#D4AF7F',
   },
 };
 

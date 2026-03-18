@@ -21,7 +21,7 @@ export default function Timer() {
   const minutos = Math.floor(segundos / 60);
   const segs = segundos % 60;
   const porcentagem = (segundos / 300) * 100;
-  const corTimer = segundos > 150 ? '#00cc66' : segundos > 60 ? '#f0a500' : '#ff4444';
+  const corTimer = segundos > 150 ? '#7BAE7F' : segundos > 60 ? '#D4AF7F' : '#C0392B';
 
   if (aceito) {
     return (
@@ -106,35 +106,35 @@ export default function Timer() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a0a2e', padding: 20, paddingTop: 60, alignItems: 'center' },
-  titulo: { fontSize: 28, fontWeight: 'bold', color: '#f0a500', marginBottom: 5 },
-  subtitulo: { fontSize: 14, color: '#999', marginBottom: 30 },
-  timerCirculo: { width: 150, height: 150, borderRadius: 75, borderWidth: 6, borderColor: '#2d1b4e', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  container: { flex: 1, backgroundColor: '#E8DCCF', padding: 20, paddingTop: 60, alignItems: 'center' },
+  titulo: { fontSize: 28, fontWeight: 'bold', color: '#6B4F3A', marginBottom: 5 },
+  subtitulo: { fontSize: 14, color: '#CBB8A6', marginBottom: 30 },
+  timerCirculo: { width: 150, height: 150, borderRadius: 75, borderWidth: 6, borderColor: '#D9CEC5', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
   timerNumero: { fontSize: 36, fontWeight: 'bold' },
-  timerLabel: { color: '#999', fontSize: 13 },
-  barraFundo: { width: '100%', height: 8, backgroundColor: '#2d1b4e', borderRadius: 4, marginBottom: 25 },
+  timerLabel: { color: '#CBB8A6', fontSize: 13 },
+  barraFundo: { width: '100%', height: 8, backgroundColor: '#D9CEC5', borderRadius: 4, marginBottom: 25 },
   barraProgresso: { height: 8, borderRadius: 4 },
-  pedidoCard: { backgroundColor: '#2d1b4e', borderRadius: 15, padding: 20, width: '100%', marginBottom: 20 },
-  pedidoTitulo: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 15 },
+  pedidoCard: { backgroundColor: '#F7F3EF', borderRadius: 15, padding: 20, width: '100%', marginBottom: 20, shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  pedidoTitulo: { color: '#6B4F3A', fontSize: 16, fontWeight: 'bold', marginBottom: 15 },
   linha: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  label: { color: '#999', fontSize: 14 },
-  valor: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
-  distancia: { color: '#00cc66', fontSize: 14, fontWeight: 'bold' },
-  valorDestaque: { color: '#f0a500', fontSize: 16, fontWeight: 'bold' },
+  label: { color: '#CBB8A6', fontSize: 14 },
+  valor: { color: '#6B4F3A', fontSize: 14, fontWeight: 'bold' },
+  distancia: { color: '#7BAE7F', fontSize: 14, fontWeight: 'bold' },
+  valorDestaque: { color: '#D4AF7F', fontSize: 16, fontWeight: 'bold' },
   botoesRow: { flexDirection: 'row', width: '100%' },
-  botaoRecusar: { flex: 1, borderWidth: 2, borderColor: '#ff4444', borderRadius: 10, padding: 15, alignItems: 'center', marginRight: 10 },
-  botaoRecusarTexto: { color: '#ff4444', fontWeight: 'bold', fontSize: 16 },
-  botaoAceitar: { flex: 1, backgroundColor: '#f0a500', borderRadius: 10, padding: 15, alignItems: 'center' },
-  botaoAceitarTexto: { color: '#1a0a2e', fontWeight: 'bold', fontSize: 16 },
-  avisoUrgente: { color: '#ff4444', fontWeight: 'bold', textAlign: 'center', marginTop: 15, fontSize: 13 },
+  botaoRecusar: { flex: 1, borderWidth: 2, borderColor: '#C0392B', borderRadius: 10, padding: 15, alignItems: 'center', marginRight: 10 },
+  botaoRecusarTexto: { color: '#C0392B', fontWeight: 'bold', fontSize: 16 },
+  botaoAceitar: { flex: 1, backgroundColor: '#D4AF7F', borderRadius: 10, padding: 15, alignItems: 'center' },
+  botaoAceitarTexto: { color: '#4A3020', fontWeight: 'bold', fontSize: 16 },
+  avisoUrgente: { color: '#C0392B', fontWeight: 'bold', textAlign: 'center', marginTop: 15, fontSize: 13 },
   sucessoEmoji: { fontSize: 80, marginBottom: 20 },
-  sucessoTitulo: { fontSize: 26, fontWeight: 'bold', color: '#00cc66', marginBottom: 10 },
-  sucessoDescricao: { color: '#999', textAlign: 'center', fontSize: 14, marginBottom: 30 },
-  botaoVerde: { width: '100%', backgroundColor: '#00cc66', borderRadius: 10, padding: 15, alignItems: 'center' },
+  sucessoTitulo: { fontSize: 26, fontWeight: 'bold', color: '#7BAE7F', marginBottom: 10 },
+  sucessoDescricao: { color: '#CBB8A6', textAlign: 'center', fontSize: 14, marginBottom: 30 },
+  botaoVerde: { width: '100%', backgroundColor: '#7BAE7F', borderRadius: 10, padding: 15, alignItems: 'center' },
   botaoVerdeTexto: { color: '#ffffff', fontWeight: 'bold', fontSize: 16 },
   falhaEmoji: { fontSize: 80, marginBottom: 20 },
-  falhaTitulo: { fontSize: 26, fontWeight: 'bold', color: '#ff4444', marginBottom: 10 },
-  falhaDescricao: { color: '#999', textAlign: 'center', fontSize: 14, marginBottom: 30 },
-  botaoVoltar: { width: '100%', borderWidth: 2, borderColor: '#f0a500', borderRadius: 10, padding: 15, alignItems: 'center' },
-  botaoVoltarTexto: { color: '#f0a500', fontWeight: 'bold', fontSize: 16 },
+  falhaTitulo: { fontSize: 26, fontWeight: 'bold', color: '#C0392B', marginBottom: 10 },
+  falhaDescricao: { color: '#CBB8A6', textAlign: 'center', fontSize: 14, marginBottom: 30 },
+  botaoVoltar: { width: '100%', borderWidth: 2, borderColor: '#D4AF7F', borderRadius: 10, padding: 15, alignItems: 'center' },
+  botaoVoltarTexto: { color: '#D4AF7F', fontWeight: 'bold', fontSize: 16 },
 });

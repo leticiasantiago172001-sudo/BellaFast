@@ -49,8 +49,8 @@ export default function Login() {
         </TouchableOpacity>
       </View>
 
-      <TextInput style={styles.input} placeholder="Seu email" placeholderTextColor="#999" keyboardType="email-address" value={email} onChangeText={setEmail} />
-      <TextInput style={styles.input} placeholder="Sua senha" placeholderTextColor="#999" secureTextEntry={true} value={senha} onChangeText={setSenha} />
+      <TextInput style={styles.input} placeholder="Seu email" placeholderTextColor="#CBB8A6" keyboardType="email-address" value={email} onChangeText={setEmail} />
+      <TextInput style={styles.input} placeholder="Sua senha" placeholderTextColor="#CBB8A6" secureTextEntry={true} value={senha} onChangeText={setSenha} />
 
       <TouchableOpacity style={carregando ? styles.botaoDesabilitado : styles.botao} onPress={entrar} disabled={carregando}>
         <Text style={styles.botaoTexto}>{carregando ? 'Entrando...' : 'Entrar'}</Text>
@@ -78,19 +78,19 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a0a2e', alignItems: 'center', justifyContent: 'center', padding: 30 },
-  logo: { fontSize: 36, fontWeight: 'bold', color: '#f0a500', marginBottom: 5 },
-  slogan: { fontSize: 14, color: '#ffffff', marginBottom: 30 },
-  tiposRow: { flexDirection: 'row', backgroundColor: '#2d1b4e', borderRadius: 12, padding: 4, marginBottom: 30, width: '100%' },
-  tipoAtivo: { flex: 1, backgroundColor: '#f0a500', borderRadius: 10, padding: 12, alignItems: 'center' },
+  container: { flex: 1, backgroundColor: '#E8DCCF', alignItems: 'center', justifyContent: 'center', padding: 30 },
+  logo: { fontSize: 36, fontWeight: 'bold', color: '#6B4F3A', marginBottom: 5 },
+  slogan: { fontSize: 14, color: '#CBB8A6', marginBottom: 30 },
+  tiposRow: { flexDirection: 'row', backgroundColor: '#F7F3EF', borderRadius: 12, padding: 4, marginBottom: 30, width: '100%', shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  tipoAtivo: { flex: 1, backgroundColor: '#D4AF7F', borderRadius: 10, padding: 12, alignItems: 'center' },
   tipoInativo: { flex: 1, padding: 12, alignItems: 'center' },
-  tipoTextoAtivo: { color: '#1a0a2e', fontWeight: 'bold', fontSize: 14 },
-  tipoTexto: { color: '#999', fontSize: 14 },
-  input: { width: '100%', backgroundColor: '#2d1b4e', borderRadius: 10, padding: 15, color: '#ffffff', marginBottom: 15, fontSize: 16 },
-  botao: { width: '100%', backgroundColor: '#f0a500', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 5 },
-  botaoDesabilitado: { width: '100%', backgroundColor: '#555', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 5 },
-  botaoTexto: { color: '#1a0a2e', fontWeight: 'bold', fontSize: 18 },
-  cadastro: { color: '#ffffff', marginTop: 20, fontSize: 14, textAlign: 'center' },
-  link: { color: '#f0a500', fontWeight: 'bold' },
-  ajuda: { color: '#999', marginTop: 12, fontSize: 13 },
+  tipoTextoAtivo: { color: '#4A3020', fontWeight: 'bold', fontSize: 14 },
+  tipoTexto: { color: '#CBB8A6', fontSize: 14 },
+  input: { width: '100%', backgroundColor: '#F7F3EF', borderRadius: 10, padding: 15, color: '#6B4F3A', marginBottom: 15, fontSize: 16, shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1 },
+  botao: { width: '100%', backgroundColor: '#D4AF7F', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 5 },
+  botaoDesabilitado: { width: '100%', backgroundColor: '#CBB8A6', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 5 },
+  botaoTexto: { color: '#4A3020', fontWeight: 'bold', fontSize: 18 },
+  cadastro: { color: '#6B4F3A', marginTop: 20, fontSize: 14, textAlign: 'center' },
+  link: { color: '#D4AF7F', fontWeight: 'bold' },
+  ajuda: { color: '#CBB8A6', marginTop: 12, fontSize: 13 },
 });

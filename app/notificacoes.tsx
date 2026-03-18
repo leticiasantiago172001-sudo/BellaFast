@@ -27,12 +27,12 @@ export default function Notificacoes() {
   const filtradas = filtro === 'nao_lidas' ? notificacoes.filter((n) => !n.lida) : notificacoes;
 
   const corTipo = (tipo: string) => {
-    if (tipo === 'pedido') return '#f0a500';
-    if (tipo === 'profissional') return '#00cc66';
-    if (tipo === 'aviso') return '#4488ff';
-    if (tipo === 'concluido') return '#00cc66';
-    if (tipo === 'promo') return '#aa44ff';
-    return '#999';
+    if (tipo === 'pedido') return '#D4AF7F';
+    if (tipo === 'profissional') return '#7BAE7F';
+    if (tipo === 'aviso') return '#7B9BB5';
+    if (tipo === 'concluido') return '#7BAE7F';
+    if (tipo === 'promo') return '#B5651D';
+    return '#CBB8A6';
   };
 
   return (
@@ -101,30 +101,30 @@ export default function Notificacoes() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { backgroundColor: '#1a0a2e' },
+  scroll: { backgroundColor: '#E8DCCF' },
   container: { padding: 20, paddingTop: 60 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  titulo: { fontSize: 24, fontWeight: 'bold', color: '#f0a500' },
-  badge: { color: '#ff4444', fontSize: 13, marginTop: 3 },
-  marcarTodas: { color: '#f0a500', fontSize: 13, marginTop: 8 },
+  titulo: { fontSize: 24, fontWeight: 'bold', color: '#6B4F3A' },
+  badge: { color: '#C0392B', fontSize: 13, marginTop: 3 },
+  marcarTodas: { color: '#D4AF7F', fontSize: 13, marginTop: 8 },
   filtros: { flexDirection: 'row', marginBottom: 20 },
-  filtroAtivo: { backgroundColor: '#f0a500', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, marginRight: 10 },
-  filtroInativo: { backgroundColor: '#2d1b4e', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, marginRight: 10 },
-  filtroTextoAtivo: { color: '#1a0a2e', fontWeight: 'bold', fontSize: 13 },
-  filtroTexto: { color: '#999', fontSize: 13 },
+  filtroAtivo: { backgroundColor: '#D4AF7F', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, marginRight: 10 },
+  filtroInativo: { backgroundColor: '#F7F3EF', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, marginRight: 10 },
+  filtroTextoAtivo: { color: '#4A3020', fontWeight: 'bold', fontSize: 13 },
+  filtroTexto: { color: '#CBB8A6', fontSize: 13 },
   vazio: { alignItems: 'center', paddingVertical: 50 },
   vazioEmoji: { fontSize: 50, marginBottom: 15 },
-  vazioTexto: { color: '#999', fontSize: 16 },
-  cardNaoLida: { backgroundColor: '#2d1b4e', borderRadius: 15, padding: 15, marginBottom: 12, flexDirection: 'row', borderLeftWidth: 3, borderLeftColor: '#f0a500' },
-  cardLida: { backgroundColor: '#1e1230', borderRadius: 15, padding: 15, marginBottom: 12, flexDirection: 'row' },
+  vazioTexto: { color: '#CBB8A6', fontSize: 16 },
+  cardNaoLida: { backgroundColor: '#F7F3EF', borderRadius: 15, padding: 15, marginBottom: 12, flexDirection: 'row', borderLeftWidth: 3, borderLeftColor: '#D4AF7F', shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1 },
+  cardLida: { backgroundColor: '#F7F3EF', borderRadius: 15, padding: 15, marginBottom: 12, flexDirection: 'row', opacity: 0.7 },
   cardEsquerda: { marginRight: 12 },
   emojiCirculo: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   emoji: { fontSize: 22 },
   cardDireita: { flex: 1 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  tituloNaoLido: { color: '#ffffff', fontWeight: 'bold', fontSize: 14, flex: 1, marginRight: 8 },
-  tituloLido: { color: '#999', fontSize: 14, flex: 1, marginRight: 8 },
-  hora: { color: '#666', fontSize: 12 },
-  mensagem: { color: '#999', fontSize: 13, lineHeight: 18 },
-  bolinha: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#f0a500', position: 'absolute', right: 0, top: 0 },
+  tituloNaoLido: { color: '#6B4F3A', fontWeight: 'bold', fontSize: 14, flex: 1, marginRight: 8 },
+  tituloLido: { color: '#CBB8A6', fontSize: 14, flex: 1, marginRight: 8 },
+  hora: { color: '#CBB8A6', fontSize: 12 },
+  mensagem: { color: '#CBB8A6', fontSize: 13, lineHeight: 18 },
+  bolinha: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D4AF7F', position: 'absolute', right: 0, top: 0 },
 });

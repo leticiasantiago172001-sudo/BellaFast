@@ -42,10 +42,10 @@ export default function Splash() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1a0a2e', alignItems: 'center', justifyContent: 'center' },
+  container: { flex: 1, backgroundColor: '#E8DCCF', alignItems: 'center', justifyContent: 'center' },
   logoContainer: { alignItems: 'center' },
   emoji: { fontSize: 80, marginBottom: 15 },
-  nome: { fontSize: 48, fontWeight: 'bold', color: '#f0a500', marginBottom: 10 },
-  slogan: { fontSize: 16, color: '#ffffff', opacity: 0.8 },
-  versao: { position: 'absolute', bottom: 40, color: '#666', fontSize: 13 },
+  nome: { fontSize: 48, fontWeight: 'bold', color: '#6B4F3A', marginBottom: 10 },
+  slogan: { fontSize: 16, color: '#CBB8A6', opacity: 0.8 },
+  versao: { position: 'absolute', bottom: 40, color: '#CBB8A6', fontSize: 13 },
 });

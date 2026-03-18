@@ -1,142 +1,279 @@
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { supabase } from '../config-supabase';
 
 export default function Perfil() {
   const router = useRouter();
-  const [aba, setAba] = useState('perfil');
+  const [usuario, setUsuario] = useState<any>(null);
+  const [pedidos, setPedidos] = useState<any[]>([]);
+  const [editando, setEditando] = useState(false);
+  const [nome, setNome] = useState('');
+  const [telefone, setTelefone] = useState('');
+  const [foto, setFoto] = useState<string | null>(null);
+  const [enderecos, setEnderecos] = useState<string[]>([]);
+  const [novoEndereco, setNovoEndereco] = useState('');
+  const [cep, setCep] = useState('');
+  const [rua, setRua] = useState('');
+  const [numero, setNumero] = useState('');
+  const [bairro, setBairro] = useState('');
+  const [cidade, setCidade] = useState('');
+  const [estado, setEstado] = useState('');
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [adicionandoEndereco, setAdicionandoEndereco] = useState(false);
 
-  const enderecos = [
-    { id: 1, nome: 'Casa', endereco: 'Rua das Flores, 123 - Apto 45', bairro: 'Vila Nova', principal: true },
-    { id: 2, nome: 'Trabalho', endereco: 'Av. Paulista, 1000 - Sala 5', bairro: 'Bela Vista', principal: false },
-  ];
+  useEffect(() => {
+    carregarDados();
+  }, []);
 
-  const historico = [
-    { id: 1, servico: 'Manicure simples', profissional: 'Jessica Oliveira', data: '10/03', valor: 'R$ 45,00', nota: 5 },
-    { id: 2, servico: 'Escova', profissional: 'Camila Santos', data: '05/03', valor: 'R$ 60,00', nota: 5 },
-    { id: 3, servico: 'Limpeza de pele', profissional: 'Fernanda Lima', data: '28/02', valor: 'R$ 90,00', nota: 4 },
-    { id: 4, servico: 'Massagem relaxante', profissional: 'Fernanda Lima', data: '15/02', valor: 'R$ 120,00', nota: 5 },
-  ];
+  async function carregarDados() {
+    try {
+      const { data: usuarioAuth } = await supabase.auth.getUser();
+      if (!usuarioAuth?.user) return;
+
+      const { data: usuarioData } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('email', usuarioAuth.user.email)
+        .single();
+
+      if (usuarioData) {
+        setUsuario(usuarioData);
+        setNome(usuarioData.nome || '');
+        setTelefone(usuarioData.telefone || '');
+        if (usuarioData.foto_url) setFoto(usuarioData.foto_url + '?t=' + Date.now());
+        if (usuarioData.enderecos) {
+          setEnderecos(JSON.parse(usuarioData.enderecos));
+        }
+      }
+
+      const { data: pedidosData } = await supabase
+        .from('pedidos')
+        .select('*')
+        .order('cliente_id', { ascending: false });
+
+      setPedidos(pedidosData || []);
+    } catch (e) {
+      console.log('Erro:', e);
+    }
+  }
+
+  async function buscarCep(cepDigitado: string) {
+    const cepLimpo = cepDigitado.replace(/\D/g, '');
+    setCep(cepDigitado);
+    if (cepLimpo.length === 8) {
+      setBuscandoCep(true);
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+        const data = await response.json();
+        if (data.erro) {
+          Alert.alert('CEP nao encontrado!');
+          return;
+        }
+        setRua(data.logradouro || '');
+        setBairro(data.bairro || '');
+        setCidade(data.localidade || '');
+        setEstado(data.uf || '');
+      } catch (e) {
+        Alert.alert('Erro', 'Nao foi possivel buscar o CEP!');
+      } finally {
+        setBuscandoCep(false);
+      }
+    }
+  }
+
+  async function adicionarEndereco() {
+    if (!rua || !numero || !cidade) {
+      Alert.alert('Erro', 'Preencha pelo menos rua, numero e cidade!');
+      return;
+    }
+    const enderecoCompleto = `${rua}, ${numero}, ${bairro}, ${cidade}, ${estado}`;
+    const novosEnderecos = [...enderecos, enderecoCompleto];
+
+    try {
+      const { data: usuarioAuth } = await supabase.auth.getUser();
+      if (!usuarioAuth?.user) return;
+      await supabase.from('usuarios').update({ enderecos: JSON.stringify(novosEnderecos) }).eq('email', usuarioAuth.user.email);
+      setEnderecos(novosEnderecos);
+      setCep(''); setRua(''); setNumero(''); setBairro(''); setCidade(''); setEstado('');
+      setAdicionandoEndereco(false);
+      Alert.alert('✅ Endereco adicionado!');
+    } catch (e) {
+      Alert.alert('Erro', 'Nao foi possivel salvar o endereco!');
+    }
+  }
+
+  async function removerEndereco(index: number) {
+    const novosEnderecos = enderecos.filter((_, i) => i !== index);
+    try {
+      const { data: usuarioAuth } = await supabase.auth.getUser();
+      if (!usuarioAuth?.user) return;
+      await supabase.from('usuarios').update({ enderecos: JSON.stringify(novosEnderecos) }).eq('email', usuarioAuth.user.email);
+      setEnderecos(novosEnderecos);
+    } catch (e) {
+      Alert.alert('Erro', 'Nao foi possivel remover o endereco!');
+    }
+  }
+
+  async function escolherFoto() {
+    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissao.granted) return;
+    const resultado = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+    if (!resultado.canceled) {
+      const uri = resultado.assets[0].uri;
+      setFoto(uri);
+      await uploadFoto(uri);
+    }
+  }
+
+  async function uploadFoto(uri: string) {
+    try {
+      const { data: usuarioAuth } = await supabase.auth.getUser();
+      if (!usuarioAuth?.user) return;
+      const response = await fetch(uri);
+      const arrayBuffer = await response.arrayBuffer();
+      const fileName = `${usuarioAuth.user.id}.jpg`;
+      const { error } = await supabase.storage.from('fotos-perfil').upload(fileName, arrayBuffer, { upsert: true, contentType: 'image/jpeg' });
+      if (!error) {
+        const { data } = supabase.storage.from('fotos-perfil').getPublicUrl(fileName);
+        await supabase.from('usuarios').update({ foto_url: data.publicUrl }).eq('email', usuarioAuth.user.email);
+        setFoto(data.publicUrl + '?t=' + Date.now());
+      } else {
+        Alert.alert('Erro ao salvar foto', error.message);
+      }
+    } catch (e: any) {
+      Alert.alert('Erro ao salvar foto', e?.message || String(e));
+    }
+  }
+
+  async function salvarPerfil() {
+    try {
+      const { data: usuarioAuth } = await supabase.auth.getUser();
+      if (!usuarioAuth?.user) return;
+      await supabase.from('usuarios').update({ nome, telefone }).eq('email', usuarioAuth.user.email);
+      Alert.alert('✅ Perfil atualizado!');
+      setEditando(false);
+      carregarDados();
+    } catch (e) {
+      Alert.alert('Erro', 'Nao foi possivel salvar!');
+    }
+  }
+
+  const pedidosConcluidos = pedidos.filter((p) => p.status === 'concluido');
 
   return (
     <ScrollView style={styles.scroll}>
       <View style={styles.container}>
 
-        <View style={styles.abas}>
-          <TouchableOpacity style={aba === 'perfil' ? styles.abaAtiva : styles.abaInativa} onPress={() => setAba('perfil')}>
-            <Text style={aba === 'perfil' ? styles.abaTextoAtivo : styles.abaTexto}>Perfil</Text>
+        <View style={styles.fotoContainer}>
+          <TouchableOpacity onPress={escolherFoto}>
+            <View style={styles.foto}>
+              {foto ? (
+                <Image source={{ uri: foto }} style={{ width: 100, height: 100, borderRadius: 50 }} />
+              ) : (
+                <Text style={styles.fotoEmoji}>👩</Text>
+              )}
+            </View>
           </TouchableOpacity>
-          <TouchableOpacity style={aba === 'enderecos' ? styles.abaAtiva : styles.abaInativa} onPress={() => setAba('enderecos')}>
-            <Text style={aba === 'enderecos' ? styles.abaTextoAtivo : styles.abaTexto}>Enderecos</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={aba === 'historico' ? styles.abaAtiva : styles.abaInativa} onPress={() => setAba('historico')}>
-            <Text style={aba === 'historico' ? styles.abaTextoAtivo : styles.abaTexto}>Historico</Text>
+          <TouchableOpacity style={styles.botaoFoto} onPress={escolherFoto}>
+            <Text style={styles.botaoFotoTexto}>Alterar foto</Text>
           </TouchableOpacity>
         </View>
 
-        {aba === 'perfil' && (
-          <View style={styles.perfilContainer}>
-            <View style={styles.foto}>
-              <Text style={styles.fotoTexto}>L</Text>
-            </View>
-            <Text style={styles.nome}>Leticia Santiago</Text>
-            <Text style={styles.email}>leticia@email.com</Text>
-
-            <View style={styles.statsRow}>
-              <View style={styles.statCard}>
-                <Text style={styles.statNumero}>12</Text>
-                <Text style={styles.statLabel}>Pedidos</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statNumero}>R$ 680</Text>
-                <Text style={styles.statLabel}>Total gasto</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statNumero}>4.9</Text>
-                <Text style={styles.statLabel}>Avaliacao</Text>
-              </View>
-            </View>
-
+        {!editando ? (
+          <View>
             <View style={styles.infoCard}>
-              <Text style={styles.infoTitulo}>Meus dados</Text>
-              <View style={styles.infoLinha}>
-                <Text style={styles.infoLabel}>Nome</Text>
-                <Text style={styles.infoValor}>Leticia Santiago</Text>
-              </View>
-              <View style={styles.infoLinha}>
-                <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValor}>leticia@email.com</Text>
-              </View>
-              <View style={styles.infoLinha}>
-                <Text style={styles.infoLabel}>Telefone</Text>
-                <Text style={styles.infoValor}>(11) 99999-9999</Text>
-              </View>
-              <View style={styles.infoLinha}>
-                <Text style={styles.infoLabel}>CPF</Text>
-                <Text style={styles.infoValor}>***.***.***-**</Text>
-              </View>
-              <View style={styles.infoLinha}>
-                <Text style={styles.infoLabel}>Membro desde</Text>
-                <Text style={styles.infoValor}>Janeiro 2026</Text>
-              </View>
+              <Text style={styles.infoLabel}>Nome</Text>
+              <Text style={styles.infoValor}>{nome || 'Nao informado'}</Text>
             </View>
-
-            <TouchableOpacity style={styles.botaoEditar}>
-              <Text style={styles.botaoEditarTexto}>Editar dados</Text>
+            <View style={styles.infoCard}>
+              <Text style={styles.infoLabel}>Email</Text>
+              <Text style={styles.infoValor}>{usuario?.email || ''}</Text>
+            </View>
+            <View style={styles.infoCard}>
+              <Text style={styles.infoLabel}>Telefone</Text>
+              <Text style={styles.infoValor}>{telefone || 'Nao informado'}</Text>
+            </View>
+            <TouchableOpacity style={styles.botaoEditar} onPress={() => setEditando(true)}>
+              <Text style={styles.botaoEditarTexto}>Editar perfil</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.botaoSair}>
-              <Text style={styles.botaoSairTexto}>Sair da conta</Text>
+          </View>
+        ) : (
+          <View>
+            <TextInput style={styles.input} placeholder="Seu nome completo" placeholderTextColor="#CBB8A6" value={nome} onChangeText={setNome} />
+            <TextInput style={styles.input} placeholder="Seu telefone" placeholderTextColor="#CBB8A6" keyboardType="phone-pad" value={telefone} onChangeText={setTelefone} />
+            <TouchableOpacity style={styles.botaoSalvar} onPress={salvarPerfil}>
+              <Text style={styles.botaoSalvarTexto}>Salvar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.botaoCancelar} onPress={() => setEditando(false)}>
+              <Text style={styles.botaoCancelarTexto}>Cancelar</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {aba === 'enderecos' && (
-          <View>
-            <Text style={styles.secao}>Meus enderecos</Text>
-            {enderecos.map((e) => (
-              <View key={e.id} style={styles.enderecoCard}>
-                <View style={styles.row}>
-                  <Text style={styles.enderecoNome}>{e.nome}</Text>
-                  {e.principal && <Text style={styles.principal}>Principal</Text>}
-                </View>
-                <Text style={styles.enderecoTexto}>{e.endereco}</Text>
-                <Text style={styles.enderecoBairro}>{e.bairro}</Text>
-                <View style={styles.row}>
-                  <TouchableOpacity style={styles.botaoEnderecoEditar}>
-                    <Text style={styles.botaoEnderecoEditarTexto}>Editar</Text>
-                  </TouchableOpacity>
-                  {!e.principal && (
-                    <TouchableOpacity style={styles.botaoEnderecoPrincipal}>
-                      <Text style={styles.botaoEnderecoPrincipalTexto}>Tornar principal</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            ))}
-            <TouchableOpacity style={styles.botaoNovoEndereco}>
-              <Text style={styles.botaoNovoEnderecoTexto}>+ Adicionar endereco</Text>
+        <Text style={styles.secao}>Meus enderecos</Text>
+        {enderecos.map((e, i) => (
+          <View key={i} style={styles.enderecoCard}>
+            <View style={styles.enderecoInfo}>
+              <Text style={styles.enderecoEmoji}>📍</Text>
+              <Text style={styles.enderecoTexto}>{e}</Text>
+              {i === 0 && <Text style={styles.enderecoPadrao}>Padrao</Text>}
+            </View>
+            <TouchableOpacity onPress={() => removerEndereco(i)}>
+              <Text style={styles.enderecoRemover}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        ))}
+
+        {!adicionandoEndereco ? (
+          <TouchableOpacity style={styles.botaoAdicionarEndereco} onPress={() => setAdicionandoEndereco(true)}>
+            <Text style={styles.botaoAdicionarEnderecoTexto}>+ Adicionar endereco</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.novoEnderecoCard}>
+            <Text style={styles.novoEnderecoTitulo}>Novo endereco</Text>
+            <View style={styles.cepRow}>
+              <TextInput
+                style={[styles.input, { flex: 1, marginRight: 10 }]}
+                placeholder="CEP"
+                placeholderTextColor="#CBB8A6"
+                keyboardType="numeric"
+                maxLength={9}
+                value={cep}
+                onChangeText={buscarCep}
+              />
+              {buscandoCep && <Text style={styles.buscando}>Buscando...</Text>}
+            </View>
+            <TextInput style={styles.input} placeholder="Rua" placeholderTextColor="#CBB8A6" value={rua} onChangeText={setRua} />
+            <TextInput style={styles.input} placeholder="Numero" placeholderTextColor="#CBB8A6" keyboardType="numeric" value={numero} onChangeText={setNumero} />
+            <TextInput style={styles.input} placeholder="Bairro" placeholderTextColor="#CBB8A6" value={bairro} onChangeText={setBairro} />
+            <TextInput style={[styles.input, { opacity: 0.6 }]} placeholder="Cidade" placeholderTextColor="#CBB8A6" value={cidade} editable={false} />
+            <TextInput style={[styles.input, { opacity: 0.6 }]} placeholder="Estado" placeholderTextColor="#CBB8A6" value={estado} editable={false} />
+            <TouchableOpacity style={styles.botaoSalvar} onPress={adicionarEndereco}>
+              <Text style={styles.botaoSalvarTexto}>Salvar endereco</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.botaoCancelar} onPress={() => setAdicionandoEndereco(false)}>
+              <Text style={styles.botaoCancelarTexto}>Cancelar</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {aba === 'historico' && (
+        {pedidosConcluidos.length > 0 && (
           <View>
-            <Text style={styles.secao}>Meus atendimentos</Text>
-            {historico.map((h) => (
-              <View key={h.id} style={styles.historicoCard}>
-                <View style={styles.row}>
-                  <Text style={styles.historicoServico}>{h.servico}</Text>
-                  <Text style={styles.historicoValor}>{h.valor}</Text>
+            <Text style={styles.secao}>Historico</Text>
+            {pedidosConcluidos.map((p, index) => (
+              <View key={index} style={styles.historicoCard}>
+                <View style={styles.historicoInfo}>
+                  <Text style={styles.historicoServico}>{p.servico}</Text>
+                  <Text style={styles.historicoData}>{p.data}</Text>
                 </View>
-                <Text style={styles.historicoProfissional}>{h.profissional}</Text>
-                <View style={styles.row}>
-                  <Text style={styles.historicoData}>{h.data}</Text>
-                  <Text style={styles.historicoNota}>{'★'.repeat(h.nota)}</Text>
-                </View>
-                <TouchableOpacity style={styles.botaoRepetr}>
-                  <Text style={styles.botaoRepetirTexto}>Repetir servico</Text>
-                </TouchableOpacity>
+                <Text style={styles.historicoValor}>R$ {parseFloat(p.valor).toFixed(2).replace('.', ',')}</Text>
               </View>
             ))}
           </View>
@@ -148,50 +285,39 @@ export default function Perfil() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { backgroundColor: '#1a0a2e' },
+  scroll: { backgroundColor: '#E8DCCF' },
   container: { padding: 20, paddingTop: 60 },
-  abas: { flexDirection: 'row', marginBottom: 20, backgroundColor: '#2d1b4e', borderRadius: 10, padding: 4 },
-  abaAtiva: { flex: 1, backgroundColor: '#f0a500', borderRadius: 8, padding: 10, alignItems: 'center' },
-  abaInativa: { flex: 1, padding: 10, alignItems: 'center' },
-  abaTextoAtivo: { color: '#1a0a2e', fontWeight: 'bold', fontSize: 13 },
-  abaTexto: { color: '#999', fontSize: 13 },
-  perfilContainer: { alignItems: 'center' },
-  foto: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#f0a500', alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
-  fotoTexto: { fontSize: 40, fontWeight: 'bold', color: '#1a0a2e' },
-  nome: { fontSize: 24, fontWeight: 'bold', color: '#ffffff', marginBottom: 5 },
-  email: { fontSize: 14, color: '#999', marginBottom: 20 },
-  statsRow: { flexDirection: 'row', width: '100%', marginBottom: 20 },
-  statCard: { flex: 1, backgroundColor: '#2d1b4e', borderRadius: 12, padding: 15, alignItems: 'center', marginHorizontal: 4 },
-  statNumero: { color: '#f0a500', fontSize: 18, fontWeight: 'bold' },
-  statLabel: { color: '#999', fontSize: 12, marginTop: 4 },
-  infoCard: { backgroundColor: '#2d1b4e', borderRadius: 15, padding: 20, width: '100%', marginBottom: 15 },
-  infoTitulo: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginBottom: 15 },
-  infoLinha: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  infoLabel: { color: '#999', fontSize: 14 },
-  infoValor: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
-  botaoEditar: { width: '100%', borderWidth: 2, borderColor: '#f0a500', borderRadius: 10, padding: 15, alignItems: 'center', marginBottom: 12 },
-  botaoEditarTexto: { color: '#f0a500', fontWeight: 'bold', fontSize: 16 },
-  botaoSair: { width: '100%', borderWidth: 2, borderColor: '#ff4444', borderRadius: 10, padding: 15, alignItems: 'center', marginBottom: 30 },
-  botaoSairTexto: { color: '#ff4444', fontWeight: 'bold', fontSize: 16 },
-  secao: { fontSize: 18, fontWeight: 'bold', color: '#ffffff', marginBottom: 15 },
-  enderecoCard: { backgroundColor: '#2d1b4e', borderRadius: 15, padding: 15, marginBottom: 12 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  enderecoNome: { color: '#ffffff', fontWeight: 'bold', fontSize: 16 },
-  principal: { color: '#00cc66', fontWeight: 'bold', fontSize: 13 },
-  enderecoTexto: { color: '#999', fontSize: 14, marginBottom: 3 },
-  enderecoBairro: { color: '#666', fontSize: 13, marginBottom: 10 },
-  botaoEnderecoEditar: { borderWidth: 1, borderColor: '#f0a500', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
-  botaoEnderecoEditarTexto: { color: '#f0a500', fontSize: 13 },
-  botaoEnderecoPrincipal: { borderWidth: 1, borderColor: '#00cc66', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
-  botaoEnderecoPrincipalTexto: { color: '#00cc66', fontSize: 13 },
-  botaoNovoEndereco: { borderWidth: 2, borderColor: '#f0a500', borderRadius: 10, padding: 15, alignItems: 'center', borderStyle: 'dashed', marginTop: 5 },
-  botaoNovoEnderecoTexto: { color: '#f0a500', fontWeight: 'bold', fontSize: 15 },
-  historicoCard: { backgroundColor: '#2d1b4e', borderRadius: 15, padding: 15, marginBottom: 12 },
-  historicoServico: { color: '#ffffff', fontWeight: 'bold', fontSize: 15 },
-  historicoValor: { color: '#f0a500', fontWeight: 'bold', fontSize: 15 },
-  historicoProfissional: { color: '#999', fontSize: 13, marginBottom: 5 },
-  historicoData: { color: '#666', fontSize: 13 },
-  historicoNota: { color: '#f0a500', fontSize: 14 },
-  botaoRepetr: { borderWidth: 1, borderColor: '#f0a500', borderRadius: 8, padding: 8, alignItems: 'center', marginTop: 10 },
-  botaoRepetirTexto: { color: '#f0a500', fontSize: 13, fontWeight: 'bold' },
+  fotoContainer: { alignItems: 'center', marginBottom: 25 },
+  foto: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#F7F3EF', alignItems: 'center', justifyContent: 'center', marginBottom: 10, borderWidth: 3, borderColor: '#D4AF7F', overflow: 'hidden' },
+  fotoEmoji: { fontSize: 50 },
+  botaoFoto: { backgroundColor: '#F7F3EF', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: '#D4AF7F' },
+  botaoFotoTexto: { color: '#D4AF7F', fontSize: 13, fontWeight: 'bold' },
+  infoCard: { backgroundColor: '#F7F3EF', borderRadius: 12, padding: 15, marginBottom: 10, shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1 },
+  infoLabel: { color: '#CBB8A6', fontSize: 12, marginBottom: 4 },
+  infoValor: { color: '#6B4F3A', fontSize: 15, fontWeight: 'bold' },
+  input: { width: '100%', backgroundColor: '#F7F3EF', borderRadius: 10, padding: 15, color: '#6B4F3A', marginBottom: 12, fontSize: 16, shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1 },
+  botaoEditar: { width: '100%', borderWidth: 2, borderColor: '#D4AF7F', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 5, marginBottom: 20 },
+  botaoEditarTexto: { color: '#D4AF7F', fontWeight: 'bold', fontSize: 16 },
+  botaoSalvar: { width: '100%', backgroundColor: '#D4AF7F', borderRadius: 10, padding: 15, alignItems: 'center', marginBottom: 10 },
+  botaoSalvarTexto: { color: '#4A3020', fontWeight: 'bold', fontSize: 16 },
+  botaoCancelar: { width: '100%', borderWidth: 2, borderColor: '#C0392B', borderRadius: 10, padding: 15, alignItems: 'center', marginBottom: 20 },
+  botaoCancelarTexto: { color: '#C0392B', fontWeight: 'bold', fontSize: 16 },
+  secao: { fontSize: 17, fontWeight: 'bold', color: '#6B4F3A', marginBottom: 12, marginTop: 10 },
+  enderecoCard: { backgroundColor: '#F7F3EF', borderRadius: 12, padding: 15, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1 },
+  enderecoInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  enderecoEmoji: { fontSize: 20, marginRight: 10 },
+  enderecoTexto: { color: '#6B4F3A', fontSize: 13, flex: 1 },
+  enderecoPadrao: { color: '#D4AF7F', fontSize: 10, fontWeight: 'bold', marginLeft: 5 },
+  enderecoRemover: { color: '#C0392B', fontSize: 18, fontWeight: 'bold', marginLeft: 10 },
+  botaoAdicionarEndereco: { borderWidth: 2, borderColor: '#D4AF7F', borderStyle: 'dashed', borderRadius: 12, padding: 15, alignItems: 'center', marginBottom: 20 },
+  botaoAdicionarEnderecoTexto: { color: '#D4AF7F', fontWeight: 'bold', fontSize: 15 },
+  novoEnderecoCard: { backgroundColor: '#F7F3EF', borderRadius: 15, padding: 20, marginBottom: 20, shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  novoEnderecoTitulo: { color: '#6B4F3A', fontSize: 16, fontWeight: 'bold', marginBottom: 15 },
+  cepRow: { flexDirection: 'row', alignItems: 'center' },
+  buscando: { color: '#D4AF7F', fontSize: 13 },
+  historicoCard: { backgroundColor: '#F7F3EF', borderRadius: 12, padding: 15, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1 },
+  historicoInfo: {},
+  historicoServico: { color: '#6B4F3A', fontSize: 14, fontWeight: 'bold' },
+  historicoData: { color: '#CBB8A6', fontSize: 12, marginTop: 3 },
+  historicoValor: { color: '#D4AF7F', fontSize: 15, fontWeight: 'bold' },
 });
