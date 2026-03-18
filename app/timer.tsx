@@ -4,28 +4,31 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function Timer() {
   const router = useRouter();
-  const [segundos, setSegundos] = useState(600);
+  const [segundos, setSegundos] = useState(300);
   const [aceito, setAceito] = useState(false);
   const [recusado, setRecusado] = useState(false);
 
   useEffect(() => {
     if (aceito || recusado) return;
-    if (segundos === 0) { setRecusado(true); return; }
+    if (segundos === 0) {
+      setRecusado(true);
+      return;
+    }
     const timer = setTimeout(() => setSegundos(segundos - 1), 1000);
     return () => clearTimeout(timer);
   }, [segundos, aceito, recusado]);
 
-  const minutos = Math.floor(segundos / 600);
+  const minutos = Math.floor(segundos / 60);
   const segs = segundos % 60;
-  const porcentagem = (segundos / 600) * 100;
-  const corTimer = segundos > 300 ? '#00cc66' : segundos > 120 ? '#f0a500' : '#ff4444';
+  const porcentagem = (segundos / 300) * 100;
+  const corTimer = segundos > 150 ? '#00cc66' : segundos > 60 ? '#f0a500' : '#ff4444';
 
   if (aceito) {
     return (
       <View style={styles.container}>
         <Text style={styles.sucessoEmoji}>✅</Text>
         <Text style={styles.sucessoTitulo}>Pedido aceito!</Text>
-        <Text style={styles.sucessoDescricao}>Otimo! A cliente foi notificada!</Text>
+        <Text style={styles.sucessoDescricao}>Otimo! A cliente foi notificada. Prepare-se para o atendimento!</Text>
         <TouchableOpacity style={styles.botaoVerde} onPress={() => router.push('/esterilizacao')}>
           <Text style={styles.botaoVerdeTexto}>Ver detalhes do atendimento</Text>
         </TouchableOpacity>
@@ -38,7 +41,7 @@ export default function Timer() {
       <View style={styles.container}>
         <Text style={styles.falhaEmoji}>⏰</Text>
         <Text style={styles.falhaTitulo}>Tempo esgotado!</Text>
-        <Text style={styles.falhaDescricao}>O pedido foi enviado para outra profissional.</Text>
+        <Text style={styles.falhaDescricao}>O pedido foi enviado para outra profissional disponivel.</Text>
         <TouchableOpacity style={styles.botaoVoltar} onPress={() => router.push('/profissional')}>
           <Text style={styles.botaoVoltarTexto}>Voltar para pedidos</Text>
         </TouchableOpacity>
@@ -49,7 +52,7 @@ export default function Timer() {
   return (
     <View style={styles.container}>
       <Text style={styles.titulo}>Novo pedido!</Text>
-      <Text style={styles.subtitulo}>Voce tem 10 minutos para aceitar</Text>
+      <Text style={styles.subtitulo}>Voce tem 5 minutos para aceitar</Text>
 
       <View style={styles.timerCirculo}>
         <Text style={[styles.timerNumero, { color: corTimer }]}>
@@ -73,6 +76,10 @@ export default function Timer() {
           <Text style={styles.valor}>Manicure simples</Text>
         </View>
         <View style={styles.linha}>
+          <Text style={styles.label}>Data</Text>
+          <Text style={styles.valor}>17/03 as 09:00</Text>
+        </View>
+        <View style={styles.linha}>
           <Text style={styles.label}>Distancia</Text>
           <Text style={styles.distancia}>0.8 km de voce</Text>
         </View>
@@ -91,8 +98,8 @@ export default function Timer() {
         </TouchableOpacity>
       </View>
 
-      {segundos <= 60 && (
-        <Text style={styles.avisoUrgente}>Menos de 1 minuto!</Text>
+      {segundos <= 30 && (
+        <Text style={styles.avisoUrgente}>Menos de 30 segundos! O pedido sera repassado em breve!</Text>
       )}
     </View>
   );
