@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Animated, ScrollView, StyleSheet, Text,
+  Alert, Animated, ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
 import { supabase } from '../config-supabase';
@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { id: 'pedidos', label: 'Pedidos', icon: 'receipt-outline' },
   { id: 'profissionais', label: 'Profissionais', icon: 'people-outline' },
   { id: 'financeiro', label: 'Financeiro', icon: 'wallet-outline' },
+  { id: 'influencers', label: 'Influencers', icon: 'star-outline' },
 ];
 
 export default function Admin() {
@@ -29,6 +30,12 @@ export default function Admin() {
   const [profissionais, setProfissionais] = useState<any[]>([]);
   const [clientes, setClientes] = useState<any[]>([]);
   const [filtroPedido, setFiltroPedido] = useState('todos');
+  const [influencers, setInfluencers] = useState<any[]>([]);
+  const [saquesPendentes, setSaquesPendentes] = useState<any[]>([]);
+  const [materiais, setMateriais] = useState<any[]>([]);
+  const [formInfluencer, setFormInfluencer] = useState({ email: '', cupom: '', comissao: '10' });
+  const [mostrarFormInfluencer, setMostrarFormInfluencer] = useState(false);
+  const [editandoMaterial, setEditandoMaterial] = useState<any>(null);
 
   const drawerAnim = useRef(new Animated.Value(-280)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
@@ -36,14 +43,66 @@ export default function Admin() {
   useEffect(() => { carregarDados(); }, []);
 
   async function carregarDados() {
-    const [{ data: ped }, { data: prof }, { data: cli }] = await Promise.all([
+    const [{ data: ped }, { data: prof }, { data: cli }, { data: inf }, { data: saqs }, { data: mats }] = await Promise.all([
       supabase.from('pedidos').select('*').order('cliente_id', { ascending: false }),
       supabase.from('profissionais').select('*'),
       supabase.from('usuarios').select('*'),
+      supabase.from('influencers').select('*').order('indicacoes_mes', { ascending: false }),
+      supabase.from('saques').select('*, influencers(cupom)').eq('status', 'pendente').order('created_at', { ascending: false }),
+      supabase.from('materiais_influencer').select('*').order('tipo'),
     ]);
     setPedidos(ped || []);
     setProfissionais(prof || []);
     setClientes(cli || []);
+    setInfluencers(inf || []);
+    setSaquesPendentes(saqs || []);
+    setMateriais(mats || []);
+  }
+
+  async function cadastrarInfluencer() {
+    if (!formInfluencer.email || !formInfluencer.cupom) {
+      Alert.alert('Preencha', 'Email e cupom sao obrigatorios');
+      return;
+    }
+    const emailBusca = formInfluencer.email.trim().toLowerCase();
+    const usuario = clientes.find((c: any) => c.email?.toLowerCase() === emailBusca);
+    if (!usuario) {
+      Alert.alert('Nao encontrado', 'Nenhum cliente com esse email');
+      return;
+    }
+    await supabase.from('usuarios').update({ tipo_usuario: 'influencer' }).ilike('email', emailBusca);
+    const { error } = await supabase.from('influencers').insert({
+      usuario_id: usuario.id,
+      cupom: formInfluencer.cupom.toUpperCase().replace(/\s/g, ''),
+      comissao_percentual: parseFloat(formInfluencer.comissao) || 10,
+    });
+    if (error) {
+      Alert.alert('Erro', error.message);
+      return;
+    }
+    Alert.alert('Influencer cadastrada!', `${usuario.nome} agora e uma influencer com cupom ${formInfluencer.cupom.toUpperCase()}`);
+    setFormInfluencer({ email: '', cupom: '', comissao: '10' });
+    setMostrarFormInfluencer(false);
+    carregarDados();
+  }
+
+  async function salvarMaterial(material: any) {
+    await supabase.from('materiais_influencer')
+      .update({ titulo: material.titulo, descricao: material.descricao, imagem_url: material.imagem_url, updated_at: new Date().toISOString() })
+      .eq('id', material.id);
+    setEditandoMaterial(null);
+    carregarDados();
+    Alert.alert('Material atualizado!');
+  }
+
+  async function pagarSaque(saqueId: string, influencerId: string, valor: number) {
+    await supabase.from('saques').update({ status: 'pago', pago_em: new Date().toISOString() }).eq('id', saqueId);
+    const { data: inf } = await supabase.from('influencers').select('saldo').eq('id', influencerId).single();
+    if (inf) {
+      await supabase.from('influencers').update({ saldo: Math.max(0, (inf.saldo || 0) - valor) }).eq('id', influencerId);
+    }
+    Alert.alert('Saque pago!');
+    carregarDados();
   }
 
   function abrirDrawer() {
@@ -452,6 +511,162 @@ export default function Admin() {
           </View>
         )}
 
+        {/* ===== INFLUENCERS ===== */}
+        {aba === 'influencers' && (
+          <View style={styles.conteudo}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.tituloPagina}>Influencers ({influencers.length})</Text>
+              <TouchableOpacity
+                style={[styles.btnAprovar, { paddingHorizontal: 14 }]}
+                onPress={() => setMostrarFormInfluencer(!mostrarFormInfluencer)}
+              >
+                <Ionicons name="add-outline" size={16} color="#fff" />
+                <Text style={styles.btnAprovarTexto}> Cadastrar</Text>
+              </TouchableOpacity>
+            </View>
+
+            {mostrarFormInfluencer && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitulo}>Nova influencer</Text>
+                <Text style={styles.infLabel}>Email da cliente</Text>
+                <TextInput
+                  style={styles.infInput}
+                  placeholder="email@exemplo.com"
+                  placeholderTextColor="#CBB8A6"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={formInfluencer.email}
+                  onChangeText={(t) => setFormInfluencer({ ...formInfluencer, email: t })}
+                />
+                <Text style={styles.infLabel}>Cupom (sem espacos)</Text>
+                <TextInput
+                  style={styles.infInput}
+                  placeholder="Ex: LETI10"
+                  placeholderTextColor="#CBB8A6"
+                  autoCapitalize="characters"
+                  value={formInfluencer.cupom}
+                  onChangeText={(t) => setFormInfluencer({ ...formInfluencer, cupom: t })}
+                />
+                <Text style={styles.infLabel}>% de comissao</Text>
+                <TextInput
+                  style={styles.infInput}
+                  placeholder="10"
+                  placeholderTextColor="#CBB8A6"
+                  keyboardType="numeric"
+                  value={formInfluencer.comissao}
+                  onChangeText={(t) => setFormInfluencer({ ...formInfluencer, comissao: t })}
+                />
+                <TouchableOpacity style={styles.btnAprovar} onPress={cadastrarInfluencer}>
+                  <Text style={styles.btnAprovarTexto}>Cadastrar influencer</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {influencers.length === 0 && <Text style={styles.vazio}>Nenhuma influencer cadastrada</Text>}
+
+            {influencers.map((inf, i) => {
+              const cli = clientes.find((c) => c.id === inf.usuario_id);
+              return (
+                <View key={i} style={styles.profCard}>
+                  <View style={styles.profTop}>
+                    <View style={[styles.profAvatar, { backgroundColor: '#D4AF7F' }]}>
+                      <Text style={{ fontSize: 22 }}>⭐</Text>
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={styles.profNome}>{cli?.nome || 'Influencer'}</Text>
+                      <Text style={styles.profDetalhe}>Cupom: {inf.cupom}</Text>
+                      <Text style={styles.profDetalhe}>Comissao: {inf.comissao_percentual}%</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.kpiValor, { fontSize: 16 }]}>{inf.indicacoes_mes}</Text>
+                      <Text style={styles.kpiLabel}>este mes</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.profBotoes, { borderTopWidth: 1, borderTopColor: '#E8DCCF', paddingTop: 10 }]}>
+                    <View style={[styles.finCard, { flex: 1, marginBottom: 0, marginRight: 6, borderLeftColor: '#D4AF7F', padding: 10 }]}>
+                      <Text style={styles.profDetalhe}>Saldo</Text>
+                      <Text style={[styles.profNome, { color: '#D4AF7F' }]}>R$ {parseFloat(inf.saldo || 0).toFixed(2).replace('.', ',')}</Text>
+                    </View>
+                    <View style={[styles.finCard, { flex: 1, marginBottom: 0, borderLeftColor: '#7BAE7F', padding: 10 }]}>
+                      <Text style={styles.profDetalhe}>Total</Text>
+                      <Text style={[styles.profNome, { color: '#7BAE7F' }]}>{inf.total_indicacoes} indic.</Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+
+            {/* Materiais de divulgacao */}
+            <View style={{ marginTop: 10, marginBottom: 6 }}>
+              <Text style={[styles.tituloPagina, { fontSize: 16 }]}>Materiais de divulgacao</Text>
+              {materiais.map((m) => (
+                <View key={m.id} style={[styles.card, { borderLeftWidth: 4, borderLeftColor: m.tipo === 'promocao' ? '#C0392B' : '#7BAE7F' }]}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <View style={[styles.miniStatus, { backgroundColor: m.tipo === 'promocao' ? '#C0392B22' : '#7BAE7F22' }]}>
+                      <Text style={[styles.miniStatusTexto, { color: m.tipo === 'promocao' ? '#C0392B' : '#7BAE7F' }]}>
+                        {m.tipo === 'promocao' ? '🍂 Sazonal' : '📌 Padrão'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {editandoMaterial?.id === m.id ? (
+                    <View>
+                      <Text style={styles.infLabel}>Título</Text>
+                      <TextInput style={styles.infInput} value={editandoMaterial.titulo} onChangeText={(t) => setEditandoMaterial({ ...editandoMaterial, titulo: t })} placeholderTextColor="#CBB8A6" />
+                      <Text style={styles.infLabel}>Descrição / Texto</Text>
+                      <TextInput style={[styles.infInput, { height: 80, textAlignVertical: 'top' }]} value={editandoMaterial.descricao} onChangeText={(t) => setEditandoMaterial({ ...editandoMaterial, descricao: t })} multiline placeholderTextColor="#CBB8A6" />
+                      <Text style={styles.infLabel}>URL da foto ou video</Text>
+                      <TextInput style={styles.infInput} value={editandoMaterial.imagem_url || ''} onChangeText={(t) => setEditandoMaterial({ ...editandoMaterial, imagem_url: t })} placeholder="https://..." placeholderTextColor="#CBB8A6" autoCapitalize="none" />
+                      <View style={styles.profBotoes}>
+                        <TouchableOpacity style={styles.btnAprovar} onPress={() => salvarMaterial(editandoMaterial)}>
+                          <Text style={styles.btnAprovarTexto}>Salvar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.btnBloquear} onPress={() => setEditandoMaterial(null)}>
+                          <Text style={styles.btnBloquearTexto}>Cancelar</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <View>
+                      <Text style={styles.profNome}>{m.titulo}</Text>
+                      <Text style={styles.profDetalhe}>{m.descricao}</Text>
+                      {m.imagem_url ? <Text style={[styles.profDetalhe, { color: '#7B9BB5' }]}>📎 Midia anexada</Text> : <Text style={styles.profDetalhe}>Sem foto ou video</Text>}
+                      <TouchableOpacity style={[styles.btnAprovar, { marginTop: 10 }]} onPress={() => setEditandoMaterial({ ...m })}>
+                        <Ionicons name="pencil-outline" size={14} color="#fff" />
+                        <Text style={styles.btnAprovarTexto}> Editar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+
+            {saquesPendentes.length > 0 && (
+              <View style={{ marginTop: 10 }}>
+                <Text style={[styles.tituloPagina, { fontSize: 16 }]}>Saques pendentes ({saquesPendentes.length})</Text>
+                {saquesPendentes.map((s, i) => (
+                  <View key={i} style={styles.pedidoCard}>
+                    <View style={[styles.pedidoAccent, { backgroundColor: '#D4AF7F' }]} />
+                    <View style={styles.pedidoCorpo}>
+                      <View style={styles.pedidoTop}>
+                        <Text style={styles.pedidoServico}>Saque solicitado</Text>
+                        <Text style={styles.pedidoValor}>R$ {parseFloat(s.valor).toFixed(2).replace('.', ',')}</Text>
+                      </View>
+                      <Text style={styles.pedidoInfo}>Cupom: {s.influencers?.cupom || '---'}</Text>
+                      <Text style={styles.pedidoInfo}>Chave PIX: {s.chave_pix}</Text>
+                      <Text style={styles.pedidoInfo}>Solicitado em: {new Date(s.created_at).toLocaleDateString('pt-BR')}</Text>
+                      <TouchableOpacity style={styles.btnAprovar} onPress={() => pagarSaque(s.id, s.influencer_id, parseFloat(s.valor))}>
+                        <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
+                        <Text style={styles.btnAprovarTexto}> Marcar como pago</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         <View style={{ height: 40 }} />
       </ScrollView>
 
@@ -636,4 +851,6 @@ const styles = StyleSheet.create({
   drawerBadgeTexto: { color: '#4A3020', fontSize: 11, fontWeight: 'bold' },
   drawerRodape: { position: 'absolute', bottom: 30, left: 0, right: 0, alignItems: 'center' },
   drawerVersao: { color: '#6B4F3A', fontSize: 12 },
+  infLabel: { color: '#6B4F3A', fontSize: 13, fontWeight: 'bold', marginBottom: 6, marginTop: 4 },
+  infInput: { backgroundColor: '#E8DCCF', borderRadius: 10, padding: 12, color: '#6B4F3A', marginBottom: 10, fontSize: 15, borderWidth: 1, borderColor: '#D9CEC5' },
 });

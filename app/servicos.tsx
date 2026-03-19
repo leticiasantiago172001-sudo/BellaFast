@@ -28,11 +28,13 @@ export default function Servicos() {
       const { data: usuarioAuth } = await supabase.auth.getUser();
       if (!usuarioAuth?.user) return;
 
-      const { data: usuarioData } = await supabase
+      const { data: usuariosData } = await supabase
         .from('usuarios')
         .select('*')
-        .eq('email', usuarioAuth.user.email)
-        .single();
+        .ilike('email', usuarioAuth.user.email)
+        .order('tipo_usuario', { ascending: false })
+        .limit(1);
+      const usuarioData = usuariosData?.[0];
 
       if (usuarioData) {
         setUsuario(usuarioData);
@@ -81,6 +83,11 @@ export default function Servicos() {
             <TouchableOpacity style={styles.iconeBtn} onPress={() => router.push('/notificacoes')}>
               <Text style={styles.icone}>🔔</Text>
             </TouchableOpacity>
+            {usuario?.tipo_usuario === 'influencer' && (
+              <TouchableOpacity style={[styles.iconeBtn, { backgroundColor: '#D4AF7F' }]} onPress={() => router.push('/painel-influencer')}>
+                <Text style={styles.icone}>⭐</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.iconeBtn} onPress={() => router.push('/perfil')}>
               <Text style={styles.icone}>👤</Text>
             </TouchableOpacity>
@@ -160,6 +167,7 @@ export default function Servicos() {
           </View>
         )}
 
+
       </View>
     </ScrollView>
   );
@@ -200,4 +208,9 @@ const styles = StyleSheet.create({
   historicoCard: { backgroundColor: '#F7F3EF', borderRadius: 12, padding: 12, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1 },
   historicoServico: { color: '#6B4F3A', fontSize: 14, fontWeight: 'bold' },
   historicoInfo: { color: '#CBB8A6', fontSize: 12 },
+  influencerBtn: { backgroundColor: '#6B4F3A', borderRadius: 14, padding: 16, flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 10 },
+  influencerEmoji: { fontSize: 26, marginRight: 12 },
+  influencerTitulo: { fontSize: 15, fontWeight: 'bold', color: '#F7F3EF', marginBottom: 2 },
+  influencerSub: { fontSize: 12, color: '#CBB8A6' },
+  influencerArrow: { color: '#D4AF7F', fontSize: 20, fontWeight: 'bold' },
 });

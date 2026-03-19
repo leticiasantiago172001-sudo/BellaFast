@@ -5,15 +5,21 @@ import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View 
 import { enderecoParaCoordenadas } from '../config-maps';
 import { supabase } from '../config-supabase';
 
-const DIAS = [
-  { dia: 'SEG', data: '17/03' },
-  { dia: 'TER', data: '18/03' },
-  { dia: 'QUA', data: '19/03' },
-  { dia: 'QUI', data: '20/03' },
-  { dia: 'SEX', data: '21/03' },
-  { dia: 'SAB', data: '22/03' },
-  { dia: 'DOM', data: '23/03' },
-];
+const NOMES_DIAS = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
+
+function gerarProximosDias(quantidade = 14) {
+  const hoje = new Date();
+  return Array.from({ length: quantidade }, (_, i) => {
+    const d = new Date(hoje);
+    d.setDate(hoje.getDate() + i);
+    return {
+      dia: NOMES_DIAS[d.getDay()],
+      data: `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`,
+    };
+  });
+}
+
+const DIAS = gerarProximosDias();
 
 const HORARIOS = [
   '08:00', '08:30', '09:00', '09:30',

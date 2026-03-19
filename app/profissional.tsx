@@ -115,7 +115,7 @@ export default function Profissional() {
   }
 
   function getCliente(pedido: any) {
-    return clientes.find((c) => c.email === pedido.email_cliente) || null;
+    return clientes.find((c) => c.email?.toLowerCase().trim() === pedido.email_cliente?.toLowerCase().trim()) || null;
   }
 
   function calcularMinutos(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -266,6 +266,12 @@ export default function Profissional() {
                       </View>
                       <Text style={styles.expandirIcon}>{expandido ? '▲' : '▼'}</Text>
                     </View>
+
+                    {(p.is_influencer || getCliente(p)?.tipo_usuario === 'influencer') && (
+                      <View style={styles.influencerAviso}>
+                        <Text style={styles.influencerAvisoTexto}>⭐ Cliente influencer — ao aceitar este pedido, você concorda que pode aparecer em fotos ou videos nas redes sociais dela.</Text>
+                      </View>
+                    )}
 
                     <View style={styles.enderecoRow}>
                       <Text style={styles.enderecoTexto}>📍 {p.endereco}</Text>
@@ -490,6 +496,8 @@ const styles = StyleSheet.create({
   vazio: { color: '#CBB8A6', textAlign: 'center', padding: 20 },
   dica: { color: '#CBB8A6', fontSize: 12, marginBottom: 15 },
   label: { color: '#6B4F3A', fontSize: 14, fontWeight: 'bold', marginBottom: 10 },
+  influencerAviso: { backgroundColor: '#FFF9F0', borderRadius: 10, padding: 10, marginBottom: 10, borderWidth: 1, borderColor: '#D4AF7F', flexDirection: 'row' },
+  influencerAvisoTexto: { color: '#6B4F3A', fontSize: 12, flex: 1, lineHeight: 18 },
   card: { backgroundColor: '#F7F3EF', borderRadius: 15, padding: 15, marginBottom: 15, borderWidth: 2, borderColor: '#D4AF7F', shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
   cardAceito: { backgroundColor: '#F7F3EF', borderRadius: 15, padding: 15, marginBottom: 15, borderWidth: 2, borderColor: '#7BAE7F', shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
   cardConcluido: { backgroundColor: '#F7F3EF', borderRadius: 15, padding: 15, marginBottom: 15, shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1 },

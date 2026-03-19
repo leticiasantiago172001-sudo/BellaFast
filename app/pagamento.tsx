@@ -13,6 +13,12 @@ export default function Pagamento() {
   const [etapa, setEtapa] = useState<'selecionando' | 'cartao' | 'pix' | 'processando'>('selecionando');
   const [usuario, setUsuario] = useState<any>(null);
 
+  const [cupom, setCupom] = useState('');
+  const [influencerCupom, setInfluencerCupom] = useState<any>(null);
+  const [cupomAplicado, setCupomAplicado] = useState(false);
+  const [influencerData, setInfluencerData] = useState<any>(null);
+  const [usandoBeneficio, setUsandoBeneficio] = useState(false);
+
   const [numeroCartao, setNumeroCartao] = useState('');
   const [nomeCartao, setNomeCartao] = useState('');
   const [validade, setValidade] = useState('');
@@ -38,8 +44,15 @@ export default function Pagamento() {
       }
       const { data: auth } = await supabase.auth.getUser();
       if (auth?.user) {
-        const { data: user } = await supabase.from('usuarios').select('*').eq('email', auth.user.email).single();
+        const { data: usuarios } = await supabase.from('usuarios').select('*').ilike('email', auth.user.email).limit(1);
+        const user = usuarios?.[0];
         setUsuario(user);
+
+        // Verifica se é influencer e se tem benefício disponível
+        if (user?.id) {
+          const { data: inf } = await supabase.from('influencers').select('*').eq('usuario_id', user.id).limit(1);
+          if (inf?.[0]) setInfluencerData(inf[0]);
+        }
 
         // Busca profissional aprovada com recipient_id para o split
         const { data: prof } = await supabase
@@ -178,7 +191,7 @@ export default function Pagamento() {
     await AsyncStorage.setItem('pedido_atual', JSON.stringify(dadosAtualizados));
     const { data: auth } = await supabase.auth.getUser();
     if (auth?.user) {
-      await supabase.from('pedidos').insert({
+      const { data: pedidoInserido } = await supabase.from('pedidos').insert({
         email_cliente: auth.user.email,
         servico: dadosPedido?.servico || 'Servico BellaFast',
         valor: valorComTaxa,
@@ -191,13 +204,83 @@ export default function Pagamento() {
         status: 'pendente',
         metodo_pagamento: metodoPagamento,
         pagamento_id: pagamentoId,
-      });
+        cupom_usado: influencerCupom?.cupom || null,
+        is_influencer: !!influencerData,
+      }).select().single();
+
+      // Registrar comissao se cupom foi usado
+      if (influencerCupom && pedidoInserido) {
+        const valorComissao = (valorComTaxa * (influencerCupom.comissao_percentual || 10)) / 100;
+        await supabase.from('comissoes').insert({
+          influencer_id: influencerCupom.id,
+          pedido_id: pedidoInserido.id?.toString() || pagamentoId,
+          valor_pedido: valorComTaxa,
+          valor_comissao: valorComissao,
+          status: 'pendente',
+        });
+        // Incrementar contadores
+        await supabase.from('influencers').update({
+          total_indicacoes: (influencerCupom.total_indicacoes || 0) + 1,
+          indicacoes_mes: (influencerCupom.indicacoes_mes || 0) + 1,
+        }).eq('id', influencerCupom.id);
+      }
     }
+  }
+
+  function beneficioDisponivel(): boolean {
+    if (!influencerData) return false;
+    const usado = influencerData.beneficio_usado_em;
+    if (!usado) return true;
+    const hoje = new Date();
+    const dia5 = new Date(hoje.getFullYear(), hoje.getMonth(), 5);
+    const ultimoReset = hoje.getDate() >= 5 ? dia5 : new Date(hoje.getFullYear(), hoje.getMonth() - 1, 5);
+    return new Date(usado) < ultimoReset;
+  }
+
+  async function usarBeneficio() {
+    if (!beneficioDisponivel()) return;
+    setUsandoBeneficio(true);
+    setMetodoPagamento('beneficio');
+  }
+
+  async function processarBeneficio() {
+    setEtapa('processando');
+    try {
+      await supabase.from('influencers').update({ beneficio_usado_em: new Date().toISOString() }).eq('id', influencerData.id);
+      await finalizarPedido('beneficio_' + Date.now());
+      router.push('/confirmacao');
+    } catch (e: any) {
+      Alert.alert('Erro', e.message);
+      setEtapa('selecionando');
+    }
+  }
+
+  async function aplicarCupom() {
+    if (!cupom.trim()) return;
+    const { data: inf } = await supabase
+      .from('influencers')
+      .select('*')
+      .eq('cupom', cupom.trim().toUpperCase())
+      .single();
+    if (!inf) {
+      Alert.alert('Cupom invalido', 'Esse cupom nao existe. Verifique e tente novamente.');
+      return;
+    }
+    // Anti-fraude: influencer nao pode usar o proprio cupom
+    if (inf.usuario_id === usuario?.id) {
+      Alert.alert('Cupom invalido', 'Voce nao pode usar seu proprio cupom.');
+      return;
+    }
+    setInfluencerCupom(inf);
+    setCupomAplicado(true);
+    Alert.alert('Cupom aplicado!', `Cupom ${inf.cupom} vinculado com sucesso.`);
   }
 
   function confirmarPagamento() {
     if (!metodoPagamento) return;
-    if (metodoPagamento === 'pix') {
+    if (metodoPagamento === 'beneficio') {
+      processarBeneficio();
+    } else if (metodoPagamento === 'pix') {
       processarPix();
     } else {
       setEtapa('cartao');
@@ -369,6 +452,56 @@ export default function Pagamento() {
           </View>
         </View>
 
+        {influencerData && (
+          <TouchableOpacity
+            style={[styles.beneficioCard, metodoPagamento === 'beneficio' && styles.beneficioCardAtivo, !beneficioDisponivel() && styles.beneficioCardInativo]}
+            onPress={() => {
+              if (!beneficioDisponivel()) {
+                Alert.alert('Benefício indisponível', 'Você já usou seu benefício este mês. Renova todo dia 5!');
+                return;
+              }
+              if (metodoPagamento === 'beneficio') {
+                setMetodoPagamento('');
+                setUsandoBeneficio(false);
+              } else {
+                usarBeneficio();
+              }
+            }}
+          >
+            <Text style={styles.beneficioEmoji}>⭐</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.beneficioTitulo}>Benefício de influencer</Text>
+              <Text style={styles.beneficioSub}>
+                {beneficioDisponivel() ? '1 serviço gratuito disponível este mês' : 'Já utilizado — renova todo dia 5'}
+              </Text>
+            </View>
+            {metodoPagamento === 'beneficio' && <Text style={{ color: '#D4AF7F', fontSize: 22, fontWeight: 'bold' }}>✓</Text>}
+            {!beneficioDisponivel() && <Text style={{ fontSize: 18 }}>🔒</Text>}
+          </TouchableOpacity>
+        )}
+
+        <Text style={styles.label}>Tem cupom de desconto?</Text>
+        <View style={styles.cupomRow}>
+          <TextInput
+            style={[styles.cupomInput, cupomAplicado && styles.cupomInputAtivo]}
+            placeholder="Digite o cupom"
+            placeholderTextColor="#CBB8A6"
+            autoCapitalize="characters"
+            value={cupom}
+            onChangeText={setCupom}
+            editable={!cupomAplicado}
+          />
+          {cupomAplicado ? (
+            <View style={styles.cupomConfirmado}>
+              <Text style={{ color: '#7BAE7F', fontWeight: 'bold' }}>✓ Aplicado</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.cupomBtn} onPress={aplicarCupom}>
+              <Text style={styles.cupomBtnTexto}>Aplicar</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
         <Text style={styles.label}>Como quer pagar?</Text>
 
         {metodos.map((m) => (
@@ -392,7 +525,7 @@ export default function Pagamento() {
           disabled={!metodoPagamento}
         >
           <Text style={styles.botaoTexto}>
-            {metodoPagamento === 'pix' ? 'Gerar QR Code PIX' : metodoPagamento ? 'Inserir dados do cartao' : 'Selecione uma forma de pagamento'}
+            {metodoPagamento === 'beneficio' ? 'Usar benefício gratuito' : metodoPagamento === 'pix' ? 'Gerar QR Code PIX' : metodoPagamento ? 'Inserir dados do cartao' : 'Selecione uma forma de pagamento'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -446,4 +579,16 @@ const styles = StyleSheet.create({
   pixAguardando: { backgroundColor: '#F7F3EF', borderRadius: 12, padding: 15, alignItems: 'center', marginBottom: 15, borderWidth: 1, borderColor: '#D4AF7F' },
   pixAguardandoTexto: { color: '#6B4F3A', fontSize: 14 },
   botaoJaPaguei: { width: '100%', backgroundColor: '#7BAE7F', borderRadius: 10, padding: 15, alignItems: 'center', marginBottom: 30 },
+  cupomRow: { flexDirection: 'row', marginBottom: 20, gap: 10 },
+  cupomInput: { flex: 1, backgroundColor: '#F7F3EF', borderRadius: 10, padding: 13, color: '#6B4F3A', fontSize: 15, borderWidth: 1, borderColor: '#D9CEC5' },
+  cupomInputAtivo: { borderColor: '#7BAE7F', backgroundColor: '#F0FFF0' },
+  cupomBtn: { backgroundColor: '#6B4F3A', borderRadius: 10, padding: 13, justifyContent: 'center' },
+  cupomBtnTexto: { color: '#F7F3EF', fontWeight: 'bold', fontSize: 14 },
+  cupomConfirmado: { backgroundColor: '#7BAE7F22', borderRadius: 10, padding: 13, justifyContent: 'center', borderWidth: 1, borderColor: '#7BAE7F' },
+  beneficioCard: { backgroundColor: '#F7F3EF', borderRadius: 14, padding: 16, marginBottom: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderColor: '#F7F3EF' },
+  beneficioCardAtivo: { borderColor: '#D4AF7F', backgroundColor: '#FFF9F0' },
+  beneficioCardInativo: { opacity: 0.5 },
+  beneficioEmoji: { fontSize: 28, marginRight: 14 },
+  beneficioTitulo: { fontSize: 15, fontWeight: 'bold', color: '#6B4F3A', marginBottom: 3 },
+  beneficioSub: { fontSize: 12, color: '#CBB8A6' },
 });
