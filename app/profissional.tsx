@@ -42,6 +42,22 @@ export default function Profissional() {
   const [minhaLatitude, setMinhaLatitude] = useState<number | null>(null);
   const [minhaLongitude, setMinhaLongitude] = useState<number | null>(null);
   const [clientes, setClientes] = useState<any[]>([]);
+  const [recipientIdProfissional, setRecipientIdProfissional] = useState<string | null>(null);
+  const [profissionalUserId, setProfissionalUserId] = useState<string | null>(null);
+  const [profissionalId, setProfissionalId] = useState<string | null>(null);
+  // Financeiro
+  const [saldoPendente, setSaldoPendente] = useState(0);
+  const [saldoDisponivel, setSaldoDisponivel] = useState(0);
+  const [chavePix, setChavePix] = useState('');
+  const [tipoChavePix, setTipoChavePix] = useState('cpf');
+  const [nomeTitular, setNomeTitular] = useState('');
+  const [editandoDadosBanc, setEditandoDadosBanc] = useState(false);
+  const [chavePixTemp, setChavePixTemp] = useState('');
+  const [tipoChavePixTemp, setTipoChavePixTemp] = useState('cpf');
+  const [nomeTitularTemp, setNomeTitularTemp] = useState('');
+  const [mostrarSaque, setMostrarSaque] = useState(false);
+  const [valorSaque, setValorSaque] = useState('');
+  const [historicoSaques, setHistoricoSaques] = useState<any[]>([]);
 
   useEffect(() => {
     buscarPedidos();
@@ -52,6 +68,7 @@ export default function Profissional() {
     try {
       const { data: usuarioAuth } = await supabase.auth.getUser();
       if (!usuarioAuth?.user) return;
+      setProfissionalUserId(usuarioAuth.user.id);
 
       const { data: usuario } = await supabase
         .from('usuarios')
@@ -72,10 +89,20 @@ export default function Profissional() {
         .single();
 
       if (profissional) {
+        if (profissional.recipient_id) setRecipientIdProfissional(profissional.recipient_id);
+        setProfissionalId(profissional.id);
         setEndereco(profissional.endereco_completo || '');
         setRaio(String(profissional.raio_atendimento || 10));
         setMinhaLatitude(profissional.latitude);
         setMinhaLongitude(profissional.longitude);
+        setSaldoPendente(profissional.saldo_pendente || 0);
+        setSaldoDisponivel(profissional.saldo_disponivel || 0);
+        setChavePix(profissional.chave_pix || '');
+        setChavePixTemp(profissional.chave_pix || '');
+        setTipoChavePix(profissional.tipo_chave_pix || 'cpf');
+        setTipoChavePixTemp(profissional.tipo_chave_pix || 'cpf');
+        setNomeTitular(profissional.nome_titular || '');
+        setNomeTitularTemp(profissional.nome_titular || '');
         if (profissional.especialidades) {
           setCategoriasSelecionadas(profissional.especialidades.split(', ').filter(Boolean));
         }
@@ -86,6 +113,14 @@ export default function Profissional() {
             setHorariosAtivos(agenda.horarios || []);
           } catch (e) {}
         }
+      }
+
+      // Historico de saques
+      if (profissional?.id) {
+        const { data: saqs } = await supabase.from('saques')
+          .select('*').eq('tipo', 'profissional')
+          .order('created_at', { ascending: false }).limit(10);
+        setHistoricoSaques(saqs || []);
       }
     } catch (e) {
       console.log('Erro ao carregar perfil:', e);
@@ -130,16 +165,145 @@ export default function Profissional() {
       Alert.alert('Escolha um horario!', 'Selecione um dos horarios antes de aceitar!');
       return;
     }
-    await supabase.from('pedidos').update({ status: 'aceito', horario }).eq('cliente_id', cliente_id);
+    const updates: any = { status: 'aceito', horario };
+    if (recipientIdProfissional) updates.recipient_id_profissional = recipientIdProfissional;
+    if (profissionalUserId) updates.profissional_id = profissionalUserId;
+    await supabase.from('pedidos').update(updates).eq('cliente_id', cliente_id);
     await enviarNotificacaoLocal('Pedido aceito!', `Sua profissional confirmou o horario: ${horario}`);
     await agendarNotificacao30min(horario);
     buscarPedidos();
     Alert.alert('✅ Aceito!', `Pedido aceito para as ${horario}!`);
   }
 
+  async function concluirServico(cliente_id: number) {
+    Alert.alert('Concluir serviço?', 'Confirma que o serviço foi realizado? O pagamento será liberado em até 2 horas.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Confirmar', onPress: async () => {
+          const repasse_em = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+          const agora = new Date().toISOString();
+
+          // Busca o pedido aceito (limit 1 para evitar erro com multiplos)
+          const { data: pedidos } = await supabase
+            .from('pedidos')
+            .select('*')
+            .eq('cliente_id', cliente_id)
+            .eq('status', 'aceito')
+            .limit(1);
+          const pedido = pedidos?.[0];
+
+          // Atualiza status do pedido
+          await supabase.from('pedidos').update({
+            status: 'aguardando_repasse',
+            concluido_em: agora,
+            repasse_em,
+            profissional_id: profissionalUserId,
+          }).eq('cliente_id', cliente_id).eq('status', 'aceito');
+
+          // Creditar saldo_pendente da profissional
+          if (pedido?.valor && profissionalUserId) {
+            const valorProf = parseFloat(pedido.valor) * 0.80;
+            const { data: profAtual } = await supabase
+              .from('profissionais')
+              .select('saldo_pendente')
+              .eq('usuario_id', profissionalUserId)
+              .single();
+            await supabase.from('profissionais').update({
+              saldo_pendente: (profAtual?.saldo_pendente || 0) + valorProf,
+            }).eq('usuario_id', profissionalUserId);
+
+            // Atualizar transacao com profissional_id
+            if (pedido.id) {
+              await supabase.from('transacoes')
+                .update({ profissional_id: profissionalUserId })
+                .eq('pedido_id', String(pedido.id))
+                .eq('status', 'pendente');
+            }
+          }
+
+          buscarPedidos();
+          carregarPerfil(); // Atualiza saldo na tela
+          Alert.alert('✅ Serviço concluído!', 'Pagamento será liberado em até 2 horas.');
+        },
+      },
+    ]);
+  }
+
   async function recusar(cliente_id: number) {
     await supabase.from('pedidos').update({ status: 'recusado' }).eq('cliente_id', cliente_id);
     buscarPedidos();
+  }
+
+  async function salvarDadosBancarios() {
+    if (!nomeTitularTemp.trim() || !chavePixTemp.trim()) {
+      Alert.alert('Dados incompletos', 'Preencha nome e chave PIX.');
+      return;
+    }
+    if (!profissionalUserId) {
+      Alert.alert('Erro', 'Sessao expirada. Feche e abra o app novamente.');
+      return;
+    }
+    const { error } = await supabase.from('profissionais').update({
+      nome_titular: nomeTitularTemp.trim(),
+      chave_pix: chavePixTemp.trim(),
+      tipo_chave_pix: tipoChavePixTemp,
+    }).eq('usuario_id', profissionalUserId);
+
+    if (error) {
+      Alert.alert('Erro ao salvar', error.message);
+      return;
+    }
+    setNomeTitular(nomeTitularTemp.trim());
+    setChavePix(chavePixTemp.trim());
+    setTipoChavePix(tipoChavePixTemp);
+    setEditandoDadosBanc(false);
+    Alert.alert('Dados salvos!', 'Dados bancarios atualizados com sucesso.');
+  }
+
+  async function solicitarSaqueProfissional() {
+    if (!chavePix) {
+      Alert.alert('Dados bancarios', 'Cadastre sua chave PIX primeiro.');
+      setEditandoDadosBanc(true);
+      return;
+    }
+    const valor = parseFloat(valorSaque);
+    if (!valor || valor <= 0) {
+      Alert.alert('Valor invalido', 'Informe um valor valido.');
+      return;
+    }
+    if (valor > saldoDisponivel) {
+      Alert.alert('Saldo insuficiente', 'Valor maior que seu saldo disponivel.');
+      return;
+    }
+    // Debita imediatamente
+    const novoSaldo = saldoDisponivel - valor;
+    await supabase.from('profissionais').update({ saldo_disponivel: novoSaldo }).eq('usuario_id', profissionalUserId);
+    setSaldoDisponivel(novoSaldo);
+
+    // Registra saque e dispara PIX
+    await supabase.from('saques').insert({
+      valor,
+      chave_pix: chavePix,
+      status: 'processando',
+      tipo: 'profissional',
+    });
+
+    // Invoca Edge Function para processar PIX
+    const { data, error } = await supabase.functions.invoke('processar-saques-auto', {
+      body: { tipo: 'profissional' },
+    });
+
+    if (error) {
+      // Reverte saldo se falhar
+      await supabase.from('profissionais').update({ saldo_disponivel: saldoDisponivel }).eq('usuario_id', profissionalUserId);
+      setSaldoDisponivel(saldoDisponivel);
+      Alert.alert('Erro no saque', 'Tente novamente mais tarde.');
+    } else {
+      Alert.alert('Saque enviado!', `R$ ${valor.toFixed(2).replace('.', ',')} enviado via PIX para ${chavePix}.`);
+      setMostrarSaque(false);
+      setValorSaque('');
+      carregarPerfil();
+    }
   }
 
   function toggleCategoria(id: string) {
@@ -234,8 +398,11 @@ export default function Profissional() {
     <ScrollView style={styles.scroll}>
       <View style={styles.container}>
         <View style={styles.abas}>
-          {['pedidos', 'agenda', 'ganhos', 'perfil'].map((a) => (
-            <TouchableOpacity key={a} style={aba === a ? styles.abaAtiva : styles.abaInativa} onPress={() => setAba(a)}>
+          {['pedidos', 'agenda', 'financeiro', 'perfil'].map((a) => (
+            <TouchableOpacity key={a} style={aba === a ? styles.abaAtiva : styles.abaInativa} onPress={() => {
+              setAba(a);
+              if (a === 'financeiro') carregarPerfil();
+            }}>
               <Text style={aba === a ? styles.abaTextoAtivo : styles.abaTexto}>{a.charAt(0).toUpperCase() + a.slice(1)}</Text>
             </TouchableOpacity>
           ))}
@@ -323,8 +490,8 @@ export default function Profissional() {
                 <Text style={styles.info}>📍 {p.endereco}</Text>
                 <Text style={styles.valor}>R$ {parseFloat(p.valor).toFixed(2).replace('.', ',')}</Text>
                 <Text style={styles.statusAceito}>Aceito ✅</Text>
-                <TouchableOpacity style={styles.botaoAtendimento} onPress={() => {}}>
-                  <Text style={styles.botaoAtendimentoTexto}>▶ Iniciar atendimento</Text>
+                <TouchableOpacity style={styles.botaoConcluir} onPress={() => concluirServico(p.cliente_id)}>
+                  <Text style={styles.botaoConcluirTexto}>✅ Concluir serviço</Text>
                 </TouchableOpacity>
               </View>
             ))}
@@ -384,15 +551,149 @@ export default function Profissional() {
           </View>
         )}
 
-        {aba === 'ganhos' && (
+        {aba === 'financeiro' && (
           <View>
-            <View style={styles.faturamentoCard}>
-              <Text style={styles.faturamentoLabel}>Total a receber</Text>
-              <Text style={styles.faturamentoValor}>
-                R$ {aceitos.reduce((t, p) => t + parseFloat(p.valor), 0).toFixed(2).replace('.', ',')}
-              </Text>
-              <Text style={styles.faturamentoSub}>{aceitos.length} servicos aceitos</Text>
+
+            {/* Saldos */}
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
+              <View style={[styles.faturamentoCard, { flex: 1, borderLeftWidth: 4, borderLeftColor: '#D4AF7F' }]}>
+                <Text style={[styles.faturamentoLabel, { fontSize: 11 }]}>Pendente</Text>
+                <Text style={[styles.faturamentoValor, { fontSize: 20, color: '#D4AF7F' }]}>
+                  R$ {saldoPendente.toFixed(2).replace('.', ',')}
+                </Text>
+                <Text style={[styles.faturamentoSub, { fontSize: 10 }]}>liberado em 2h</Text>
+              </View>
+              <View style={[styles.faturamentoCard, { flex: 1, borderLeftWidth: 4, borderLeftColor: '#7BAE7F' }]}>
+                <Text style={[styles.faturamentoLabel, { fontSize: 11 }]}>Disponivel</Text>
+                <Text style={[styles.faturamentoValor, { fontSize: 20, color: '#7BAE7F' }]}>
+                  R$ {saldoDisponivel.toFixed(2).replace('.', ',')}
+                </Text>
+                <Text style={[styles.faturamentoSub, { fontSize: 10 }]}>para sacar</Text>
+              </View>
             </View>
+
+            {/* Dados Bancarios */}
+            <View style={styles.card}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <Text style={styles.secao}>🏦 Dados bancarios</Text>
+                <View style={{ backgroundColor: chavePix ? '#7BAE7F22' : '#C0392B22', borderRadius: 8, padding: 6 }}>
+                  <Text style={{ color: chavePix ? '#7BAE7F' : '#C0392B', fontSize: 11, fontWeight: 'bold' }}>
+                    {chavePix ? '✅ Cadastrado' : '⚠️ Pendente'}
+                  </Text>
+                </View>
+              </View>
+
+              {!editandoDadosBanc && chavePix ? (
+                <View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#E8DCCF' }}>
+                    <Text style={{ color: '#CBB8A6', fontSize: 13 }}>Titular</Text>
+                    <Text style={{ color: '#6B4F3A', fontWeight: 'bold', fontSize: 13 }}>{nomeTitular}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#E8DCCF' }}>
+                    <Text style={{ color: '#CBB8A6', fontSize: 13 }}>Tipo</Text>
+                    <Text style={{ color: '#6B4F3A', fontWeight: 'bold', fontSize: 13 }}>{tipoChavePix.toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 }}>
+                    <Text style={{ color: '#CBB8A6', fontSize: 13 }}>Chave PIX</Text>
+                    <Text style={{ color: '#6B4F3A', fontWeight: 'bold', fontSize: 13 }}>{chavePix}</Text>
+                  </View>
+                  <TouchableOpacity style={[styles.botaoSalvarAgenda, { marginTop: 10 }]} onPress={() => setEditandoDadosBanc(true)}>
+                    <Text style={styles.botaoSalvarAgendaTexto}>✏️ Editar dados</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View>
+                  <Text style={styles.label}>Nome completo do titular</Text>
+                  <TextInput style={styles.inputPerfil} placeholder="Seu nome completo" placeholderTextColor="#CBB8A6" value={nomeTitularTemp} onChangeText={setNomeTitularTemp} />
+                  <Text style={styles.label}>Tipo de chave PIX</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                    {['cpf', 'cnpj', 'email', 'telefone', 'aleatoria'].map((tipo) => (
+                      <TouchableOpacity
+                        key={tipo}
+                        style={{ borderRadius: 8, borderWidth: 1, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: tipoChavePixTemp === tipo ? '#6B4F3A' : '#E8DCCF', borderColor: tipoChavePixTemp === tipo ? '#6B4F3A' : '#D9CEC5' }}
+                        onPress={() => setTipoChavePixTemp(tipo)}
+                      >
+                        <Text style={{ color: tipoChavePixTemp === tipo ? '#F7F3EF' : '#6B4F3A', fontSize: 12, fontWeight: 'bold' }}>
+                          {tipo === 'aleatoria' ? 'Aleatória' : tipo.toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={styles.label}>Chave PIX</Text>
+                  <TextInput
+                    style={styles.inputPerfil}
+                    placeholder={tipoChavePixTemp === 'cpf' ? '000.000.000-00' : tipoChavePixTemp === 'email' ? 'email@exemplo.com' : tipoChavePixTemp === 'telefone' ? '+55 11 99999-9999' : 'Sua chave'}
+                    placeholderTextColor="#CBB8A6"
+                    value={chavePixTemp}
+                    onChangeText={setChavePixTemp}
+                  />
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    {chavePix && (
+                      <TouchableOpacity style={[styles.botaoRecusar, { flex: 1 }]} onPress={() => setEditandoDadosBanc(false)}>
+                        <Text style={styles.botaoRecusarTexto}>Cancelar</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity style={[styles.botaoAceitar, { flex: 1, padding: 14 }]} onPress={salvarDadosBancarios}>
+                      <Text style={styles.botaoAceitarTexto}>Salvar dados</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+
+            {/* Solicitar Saque */}
+            <View style={styles.card}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View>
+                  <Text style={styles.secao}>💸 Solicitar saque</Text>
+                  <Text style={{ color: '#CBB8A6', fontSize: 12 }}>Minimo R$ 50,00</Text>
+                </View>
+                <TouchableOpacity
+                  style={saldoDisponivel > 0 ? styles.botaoAceitar : { ...styles.botaoAceitar, opacity: 0.5 }}
+                  onPress={() => saldoDisponivel > 0 ? setMostrarSaque(!mostrarSaque) : Alert.alert('Saldo insuficiente', 'Nenhum saldo disponivel para saque.')}
+                >
+                  <Text style={styles.botaoAceitarTexto}>Sacar</Text>
+                </TouchableOpacity>
+              </View>
+
+              {mostrarSaque && (
+                <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: '#E8DCCF', paddingTop: 14 }}>
+                  {chavePix ? (
+                    <View style={{ backgroundColor: '#E8DCCF', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+                      <Text style={{ color: '#CBB8A6', fontSize: 12 }}>PIX cadastrado</Text>
+                      <Text style={{ color: '#6B4F3A', fontWeight: 'bold' }}>{chavePix}</Text>
+                    </View>
+                  ) : (
+                    <Text style={{ color: '#C0392B', fontSize: 13, marginBottom: 12 }}>⚠️ Cadastre sua chave PIX acima primeiro.</Text>
+                  )}
+                  <Text style={styles.label}>Valor (disponivel: R$ {saldoDisponivel.toFixed(2).replace('.', ',')})</Text>
+                  <TextInput style={styles.inputPerfil} placeholder="Ex: 50.00" placeholderTextColor="#CBB8A6" keyboardType="numeric" value={valorSaque} onChangeText={setValorSaque} />
+                  <TouchableOpacity style={styles.botaoAceitar} onPress={solicitarSaqueProfissional}>
+                    <Text style={styles.botaoAceitarTexto}>Confirmar saque via PIX</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            {/* Historico */}
+            {historicoSaques.length > 0 && (
+              <View style={styles.card}>
+                <Text style={styles.secao}>Historico de saques</Text>
+                {historicoSaques.map((s, i) => (
+                  <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#E8DCCF' }}>
+                    <View>
+                      <Text style={{ color: '#6B4F3A', fontWeight: 'bold' }}>R$ {parseFloat(s.valor).toFixed(2).replace('.', ',')}</Text>
+                      <Text style={{ color: '#CBB8A6', fontSize: 12 }}>{new Date(s.created_at).toLocaleDateString('pt-BR')}</Text>
+                    </View>
+                    <View style={{ backgroundColor: s.status === 'pago' ? '#7BAE7F22' : s.status === 'erro' ? '#C0392B22' : '#D4AF7F22', borderRadius: 8, padding: 6, alignSelf: 'center' }}>
+                      <Text style={{ color: s.status === 'pago' ? '#7BAE7F' : s.status === 'erro' ? '#C0392B' : '#D4AF7F', fontSize: 12, fontWeight: 'bold' }}>
+                        {s.status === 'pago' ? '✅ Pago' : s.status === 'erro' ? '❌ Erro' : '⏳ Processando'}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
@@ -530,6 +831,8 @@ const styles = StyleSheet.create({
   statusAceito: { color: '#7BAE7F', fontWeight: 'bold', marginTop: 8, marginBottom: 8 },
   botaoAtendimento: { backgroundColor: '#7BAE7F', borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 5 },
   botaoAtendimentoTexto: { color: '#ffffff', fontWeight: 'bold', fontSize: 14 },
+  botaoConcluir: { backgroundColor: '#6B4F3A', borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 5 },
+  botaoConcluirTexto: { color: '#F7F3EF', fontWeight: 'bold', fontSize: 14 },
   faturamentoCard: { backgroundColor: '#F7F3EF', borderRadius: 15, padding: 25, alignItems: 'center', marginBottom: 15, shadowColor: '#6B4F3A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
   faturamentoLabel: { color: '#CBB8A6', fontSize: 14, marginBottom: 8 },
   faturamentoValor: { color: '#D4AF7F', fontSize: 36, fontWeight: 'bold' },

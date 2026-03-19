@@ -190,40 +190,71 @@ export default function Pagamento() {
     };
     await AsyncStorage.setItem('pedido_atual', JSON.stringify(dadosAtualizados));
     const { data: auth } = await supabase.auth.getUser();
-    if (auth?.user) {
-      const { data: pedidoInserido } = await supabase.from('pedidos').insert({
-        email_cliente: auth.user.email,
-        servico: dadosPedido?.servico || 'Servico BellaFast',
-        valor: valorComTaxa,
-        data: dadosPedido?.data,
-        horario: dadosPedido?.horario,
-        horarios: JSON.stringify(dadosPedido?.horarios),
-        endereco: dadosPedido?.endereco,
-        latitude: dadosPedido?.latitude,
-        longitude: dadosPedido?.longitude,
-        status: 'pendente',
-        metodo_pagamento: metodoPagamento,
-        pagamento_id: pagamentoId,
-        cupom_usado: influencerCupom?.cupom || null,
-        is_influencer: !!influencerData,
-      }).select().single();
+    if (!auth?.user) return;
 
-      // Registrar comissao se cupom foi usado
-      if (influencerCupom && pedidoInserido) {
-        const valorComissao = (valorComTaxa * (influencerCupom.comissao_percentual || 10)) / 100;
-        await supabase.from('comissoes').insert({
-          influencer_id: influencerCupom.id,
-          pedido_id: pedidoInserido.id?.toString() || pagamentoId,
-          valor_pedido: valorComTaxa,
-          valor_comissao: valorComissao,
-          status: 'pendente',
-        });
-        // Incrementar contadores
-        await supabase.from('influencers').update({
-          total_indicacoes: (influencerCupom.total_indicacoes || 0) + 1,
-          indicacoes_mes: (influencerCupom.indicacoes_mes || 0) + 1,
-        }).eq('id', influencerCupom.id);
-      }
+    const { data: pedidoInserido } = await supabase.from('pedidos').insert({
+      email_cliente: auth.user.email,
+      servico: dadosPedido?.servico || 'Servico BellaFast',
+      valor: valorComTaxa,
+      data: dadosPedido?.data,
+      horario: dadosPedido?.horario,
+      horarios: JSON.stringify(dadosPedido?.horarios),
+      endereco: dadosPedido?.endereco,
+      latitude: dadosPedido?.latitude,
+      longitude: dadosPedido?.longitude,
+      status: 'pendente',
+      metodo_pagamento: metodoPagamento,
+      pagamento_id: pagamentoId,
+      cupom_usado: influencerCupom?.cupom || null,
+      is_influencer: !!influencerData,
+    }).select().single();
+
+    // Calcular splits financeiros
+    const temCupom = !!influencerCupom;
+    const pctInfluencer = temCupom ? 0.10 : 0;
+    const pctPlataforma = temCupom ? 0.10 : 0.20;
+    const valorProfissional = valorComTaxa * 0.80;
+    const valorInfluencer = valorComTaxa * pctInfluencer;
+    const valorPlataforma = valorComTaxa * pctPlataforma;
+
+    // Registrar transacao
+    const { data: transacao } = await supabase.from('transacoes').insert({
+      pedido_id: pedidoInserido?.id?.toString() || pagamentoId,
+      valor_total: valorComTaxa,
+      valor_profissional: valorProfissional,
+      valor_influencer: valorInfluencer,
+      valor_plataforma: valorPlataforma,
+      cupom_usado: influencerCupom?.cupom || null,
+      influencer_id: influencerCupom?.id || null,
+      status: 'pendente',
+    }).select().single();
+
+    // Creditar plataforma
+    const { data: plat } = await supabase.from('plataforma_financeiro').select('*').limit(1).single();
+    if (plat) {
+      await supabase.from('plataforma_financeiro').update({
+        saldo_total: (plat.saldo_total || 0) + valorPlataforma,
+        atualizado_em: new Date().toISOString(),
+      }).eq('id', plat.id);
+    }
+
+    // Registrar comissao e creditar saldo_pendente da influencer
+    if (influencerCupom && pedidoInserido) {
+      await supabase.from('comissoes').insert({
+        influencer_id: influencerCupom.id,
+        pedido_id: pedidoInserido.id?.toString() || pagamentoId,
+        valor_pedido: valorComTaxa,
+        valor_comissao: valorInfluencer,
+        status: 'pendente',
+      });
+      const { data: infAtual } = await supabase.from('influencers')
+        .select('saldo_pendente, total_indicacoes, indicacoes_mes')
+        .eq('id', influencerCupom.id).single();
+      await supabase.from('influencers').update({
+        saldo_pendente: (infAtual?.saldo_pendente || 0) + valorInfluencer,
+        total_indicacoes: (infAtual?.total_indicacoes || 0) + 1,
+        indicacoes_mes: (infAtual?.indicacoes_mes || 0) + 1,
+      }).eq('id', influencerCupom.id);
     }
   }
 

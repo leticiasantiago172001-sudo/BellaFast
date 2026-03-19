@@ -26,7 +26,7 @@ serve(async (req) => {
     if (error) throw error;
 
     if (!pedidos || pedidos.length === 0) {
-      return new Response(JSON.stringify({ success: true, processados: 0, mensagem: 'Nenhum repasse pendente' }), {
+      return new Response(JSON.stringify({ success: true, processados: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -36,20 +36,76 @@ serve(async (req) => {
 
     for (const pedido of pedidos) {
       try {
-        // Marca como pago para evitar duplo processamento
-        await supabase
-          .from('pedidos')
-          .update({ status: 'repasse_processado', repasse_processado_em: new Date().toISOString() })
-          .eq('id', pedido.id);
+        // Marca como processando para evitar duplo processamento
+        await supabase.from('pedidos').update({
+          status: 'concluido',
+          repasse_processado_em: new Date().toISOString(),
+        }).eq('cliente_id', pedido.cliente_id);
+
+        const valorTotal = parseFloat(pedido.valor) || 0;
+        const temCupom = !!pedido.cupom_usado;
+        const valorProfissional = valorTotal * 0.80;
+        const valorInfluencer = temCupom ? valorTotal * 0.10 : 0;
+
+        // 1. Liberar saldo da profissional: pendente → disponivel
+        if (pedido.profissional_id) {
+          const { data: prof } = await supabase
+            .from('profissionais')
+            .select('saldo_pendente, saldo_disponivel')
+            .eq('usuario_id', pedido.profissional_id)
+            .single();
+
+          if (prof) {
+            await supabase.from('profissionais').update({
+              saldo_pendente: Math.max(0, (prof.saldo_pendente || 0) - valorProfissional),
+              saldo_disponivel: (prof.saldo_disponivel || 0) + valorProfissional,
+            }).eq('usuario_id', pedido.profissional_id);
+          }
+        }
+
+        // 2. Liberar saldo da influencer: pendente → disponivel
+        if (temCupom && valorInfluencer > 0) {
+          // Busca influencer pelo cupom
+          const { data: inf } = await supabase
+            .from('influencers')
+            .select('id, saldo_pendente, saldo_disponivel')
+            .eq('cupom', pedido.cupom_usado)
+            .single();
+
+          if (inf) {
+            const novoDisponivel = (inf.saldo_disponivel || 0) + valorInfluencer;
+            await supabase.from('influencers').update({
+              saldo_pendente: Math.max(0, (inf.saldo_pendente || 0) - valorInfluencer),
+              saldo_disponivel: novoDisponivel,
+              // Mantém saldo antigo em sincronia
+              saldo: novoDisponivel,
+            }).eq('id', inf.id);
+
+            // Atualiza comissao para liberado
+            await supabase.from('comissoes')
+              .update({ status: 'liberado' })
+              .eq('pedido_id', pedido.id?.toString())
+              .eq('influencer_id', inf.id);
+
+            // Se saldo disponivel >= R$50, dispara PIX automatico
+            if (novoDisponivel >= 50) {
+              await supabase.functions.invoke('processar-saques-auto', {
+                body: { tipo: 'influencer', influencer_id: inf.id },
+              });
+            }
+          }
+        }
+
+        // 3. Atualizar transacao
+        await supabase.from('transacoes')
+          .update({ status: 'liberado', liberado_em: new Date().toISOString() })
+          .eq('pedido_id', String(pedido.cliente_id));
 
         processados++;
       } catch (e: any) {
         erros.push(`Pedido ${pedido.id}: ${e.message}`);
         // Reverte status se falhar
-        await supabase
-          .from('pedidos')
-          .update({ status: 'aguardando_repasse' })
-          .eq('id', pedido.id);
+        await supabase.from('pedidos').update({ status: 'aguardando_repasse' }).eq('cliente_id', pedido.cliente_id);
       }
     }
 

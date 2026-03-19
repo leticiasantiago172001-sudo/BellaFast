@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Animated, ScrollView, StyleSheet, Text, TextInput,
+  Alert, Animated, Image, ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
 import { supabase } from '../config-supabase';
@@ -32,10 +33,15 @@ export default function Admin() {
   const [filtroPedido, setFiltroPedido] = useState('todos');
   const [influencers, setInfluencers] = useState<any[]>([]);
   const [saquesPendentes, setSaquesPendentes] = useState<any[]>([]);
+  const [transacoes, setTransacoes] = useState<any[]>([]);
+  const [plataformaFinanceiro, setPlataformaFinanceiro] = useState<any>(null);
   const [materiais, setMateriais] = useState<any[]>([]);
   const [formInfluencer, setFormInfluencer] = useState({ email: '', cupom: '', comissao: '10' });
   const [mostrarFormInfluencer, setMostrarFormInfluencer] = useState(false);
   const [editandoMaterial, setEditandoMaterial] = useState<any>(null);
+  const [adicionandoMaterial, setAdicionandoMaterial] = useState(false);
+  const [novoMaterial, setNovoMaterial] = useState({ titulo: '', descricao: '', tipo: 'padrao' });
+  const [uploadandoMaterial, setUploadandoMaterial] = useState(false);
 
   const drawerAnim = useRef(new Animated.Value(-280)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
@@ -43,13 +49,15 @@ export default function Admin() {
   useEffect(() => { carregarDados(); }, []);
 
   async function carregarDados() {
-    const [{ data: ped }, { data: prof }, { data: cli }, { data: inf }, { data: saqs }, { data: mats }] = await Promise.all([
+    const [{ data: ped }, { data: prof }, { data: cli }, { data: inf }, { data: saqs }, { data: mats }, { data: trans }, { data: plat }] = await Promise.all([
       supabase.from('pedidos').select('*').order('cliente_id', { ascending: false }),
       supabase.from('profissionais').select('*'),
       supabase.from('usuarios').select('*'),
       supabase.from('influencers').select('*').order('indicacoes_mes', { ascending: false }),
-      supabase.from('saques').select('*, influencers(cupom)').eq('status', 'pendente').order('created_at', { ascending: false }),
+      supabase.from('saques').select('*, influencers(cupom)').in('status', ['pendente', 'processando', 'erro']).order('created_at', { ascending: false }),
       supabase.from('materiais_influencer').select('*').order('tipo'),
+      supabase.from('transacoes').select('*').order('criado_em', { ascending: false }).limit(50),
+      supabase.from('plataforma_financeiro').select('*').limit(1).single(),
     ]);
     setPedidos(ped || []);
     setProfissionais(prof || []);
@@ -57,6 +65,8 @@ export default function Admin() {
     setInfluencers(inf || []);
     setSaquesPendentes(saqs || []);
     setMateriais(mats || []);
+    setTransacoes(trans || []);
+    setPlataformaFinanceiro(plat || null);
   }
 
   async function cadastrarInfluencer() {
@@ -103,6 +113,114 @@ export default function Admin() {
     }
     Alert.alert('Saque pago!');
     carregarDados();
+  }
+
+  async function liberarPagamentos() {
+    Alert.alert('Liberar pagamentos?', 'Vai liberar todos os pedidos com repasse_em <= agora.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Liberar', onPress: async () => {
+          const { data, error } = await supabase.functions.invoke('liberar-pagamento');
+          if (error) { Alert.alert('Erro', error.message); return; }
+          Alert.alert('Concluido!', `${data?.processados || 0} pagamento(s) liberado(s).${data?.erros ? '\n\nErros: ' + data.erros.join(', ') : ''}`);
+          carregarDados();
+        }
+      },
+    ]);
+  }
+
+  async function processarPixAutomatico() {
+    Alert.alert('Processar PIX', 'Isso vai enviar PIX automaticamente para todas as influencers com saldo >= R$50. Confirmar?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Confirmar', onPress: async () => {
+          const { data, error } = await supabase.functions.invoke('processar-saques-auto');
+          if (error) { Alert.alert('Erro', error.message); return; }
+          Alert.alert('Concluido!', `${data?.pagos || 0} pagamento(s) processado(s).${data?.erros ? '\n\nErros: ' + data.erros.join(', ') : ''}`);
+          carregarDados();
+        }
+      },
+    ]);
+  }
+
+  async function uploadMidia(materialId: string | null, tipoArquivo: 'foto' | 'video') {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: tipoArquivo === 'video' ? ImagePicker.MediaTypeOptions.Videos : ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+      allowsEditing: false,
+    });
+    if (result.canceled || !result.assets?.[0]) return null;
+
+    const asset = result.assets[0];
+    const uri = asset.uri;
+    const ext = uri.split('.').pop()?.toLowerCase() || (tipoArquivo === 'video' ? 'mp4' : 'jpg');
+    const fileName = `material_${Date.now()}.${ext}`;
+
+    setUploadandoMaterial(true);
+    try {
+      const response = await fetch(uri);
+      const arrayBuffer = await response.arrayBuffer();
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('materiais-influencer')
+        .upload(fileName, arrayBuffer, {
+          contentType: tipoArquivo === 'video' ? `video/${ext}` : `image/${ext}`,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        Alert.alert('Erro no upload', uploadError.message);
+        return null;
+      }
+
+      const { data: urlData } = supabase.storage.from('materiais-influencer').getPublicUrl(uploadData.path);
+      return urlData.publicUrl;
+    } catch (e: any) {
+      Alert.alert('Erro', e.message);
+      return null;
+    } finally {
+      setUploadandoMaterial(false);
+    }
+  }
+
+  async function adicionarMaterial(tipoArquivo: 'foto' | 'video') {
+    if (!novoMaterial.titulo) {
+      Alert.alert('Titulo obrigatorio', 'Preencha o titulo antes de enviar a midia');
+      return;
+    }
+    const url = await uploadMidia(null, tipoArquivo);
+    if (!url) return;
+
+    await supabase.from('materiais_influencer').insert({
+      titulo: novoMaterial.titulo,
+      descricao: novoMaterial.descricao,
+      tipo: novoMaterial.tipo,
+      imagem_url: url,
+      tipo_arquivo: tipoArquivo,
+      updated_at: new Date().toISOString(),
+    });
+
+    setNovoMaterial({ titulo: '', descricao: '', tipo: 'padrao' });
+    setAdicionandoMaterial(false);
+    carregarDados();
+    Alert.alert('Material adicionado!');
+  }
+
+  async function trocarMidiaExistente(material: any, tipoArquivo: 'foto' | 'video') {
+    const url = await uploadMidia(material.id, tipoArquivo);
+    if (!url) return;
+    setEditandoMaterial({ ...editandoMaterial, imagem_url: url, tipo_arquivo: tipoArquivo });
+  }
+
+  async function deletarMaterial(id: string) {
+    Alert.alert('Confirmar', 'Deletar este material?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Deletar', style: 'destructive', onPress: async () => {
+          await supabase.from('materiais_influencer').delete().eq('id', id);
+          carregarDados();
+        }
+      },
+    ]);
   }
 
   function abrirDrawer() {
@@ -444,72 +562,130 @@ export default function Admin() {
         )}
 
         {/* ===== FINANCEIRO ===== */}
-        {aba === 'financeiro' && (
-          <View style={styles.conteudo}>
-            <Text style={styles.tituloPagina}>Financeiro</Text>
+        {aba === 'financeiro' && (() => {
+          const saldoProfsDisp = profissionais.reduce((t, p) => t + (p.saldo_disponivel || 0), 0);
+          const saldoProfsPend = profissionais.reduce((t, p) => t + (p.saldo_pendente || 0), 0);
+          const saldoInfsDisp = influencers.reduce((t, i) => t + (i.saldo_disponivel || 0), 0);
+          const saldoInfsPend = influencers.reduce((t, i) => t + (i.saldo_pendente || 0), 0);
+          const totalRecebido = transacoes.reduce((t, tx) => t + (tx.valor_total || 0), 0);
 
-            {/* Cards principais */}
-            {[
-              { label: 'Faturamento bruto', valor: faturamento, cor: '#D4AF7F', icon: 'trending-up-outline' },
-              { label: 'Comissão BellaFast (20%)', valor: comissao, cor: '#7BAE7F', icon: 'cash-outline' },
-              { label: 'Repasse profissionais (80%)', valor: faturamento * 0.8, cor: '#7B9BB5', icon: 'people-outline' },
-            ].map((item) => (
-              <View key={item.label} style={[styles.finCard, { borderLeftColor: item.cor }]}>
+          return (
+            <View style={styles.conteudo}>
+              <Text style={styles.tituloPagina}>Financeiro</Text>
+
+              {/* Card plataforma */}
+              <View style={[styles.finCard, { borderLeftColor: '#7BAE7F' }]}>
                 <View style={styles.finCardRow}>
                   <View>
-                    <Text style={styles.finLabel}>{item.label}</Text>
-                    <Text style={[styles.finValor, { color: item.cor }]}>
-                      R$ {item.valor.toFixed(2).replace('.', ',')}
+                    <Text style={styles.finLabel}>💰 Saldo da Plataforma</Text>
+                    <Text style={[styles.finValor, { color: '#7BAE7F' }]}>
+                      R$ {(plataformaFinanceiro?.saldo_total || 0).toFixed(2).replace('.', ',')}
                     </Text>
+                    <Text style={{ color: '#CBB8A6', fontSize: 11, marginTop: 2 }}>Total recebido: R$ {totalRecebido.toFixed(2).replace('.', ',')}</Text>
                   </View>
-                  <View style={[styles.kpiIconBox, { backgroundColor: item.cor + '22' }]}>
-                    <Ionicons name={item.icon as any} size={24} color={item.cor} />
+                  <View style={[styles.kpiIconBox, { backgroundColor: '#7BAE7F22' }]}>
+                    <Ionicons name="wallet-outline" size={24} color="#7BAE7F" />
                   </View>
                 </View>
               </View>
-            ))}
 
-            {/* Por método */}
-            <View style={styles.card}>
-              <Text style={styles.cardTitulo}>Por método de pagamento</Text>
-              {[
-                { id: 'pix', label: '⚡ PIX', cor: '#7BAE7F' },
-                { id: 'credito', label: '💳 Crédito', cor: '#7B9BB5' },
-                { id: 'debito', label: '🏦 Débito', cor: '#D4AF7F' },
-              ].map((m) => {
-                const qtd = pedidos.filter((p) => (p.metodo_pagamento || 'pix') === m.id).length;
-                const pct = porMetodo[m.id] > 0 ? (porMetodo[m.id] / faturamento) * 100 : 0;
-                return (
-                  <View key={m.id} style={styles.metodoLinha}>
-                    <Text style={styles.metodoLabel}>{m.label}</Text>
-                    <View style={styles.metodoBarraWrap}>
-                      <View style={[styles.metodoBarra, { width: `${pct}%`, backgroundColor: m.cor }]} />
-                    </View>
-                    <Text style={[styles.metodoValor, { color: m.cor }]}>
-                      R${(porMetodo[m.id] || 0).toFixed(0)}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* Métricas */}
-            <View style={styles.card}>
-              <Text style={styles.cardTitulo}>Métricas</Text>
-              {[
-                { label: 'Ticket médio', valor: pedidos.length > 0 ? `R$ ${(faturamento / pedidos.length).toFixed(2).replace('.', ',')}` : 'R$ 0,00', cor: '#D4AF7F' },
-                { label: 'Total de pedidos', valor: String(pedidos.length), cor: '#6B4F3A' },
-                { label: 'Taxa de conclusão', valor: pedidos.length > 0 ? `${Math.round((statusCounts.concluido / pedidos.length) * 100)}%` : '0%', cor: '#7BAE7F' },
-                { label: 'Taxa de recusa', valor: pedidos.length > 0 ? `${Math.round((statusCounts.recusado / pedidos.length) * 100)}%` : '0%', cor: '#C0392B' },
-              ].map((m) => (
-                <View key={m.label} style={styles.metricaLinha}>
-                  <Text style={styles.metricaLabel}>{m.label}</Text>
-                  <Text style={[styles.metricaValor, { color: m.cor }]}>{m.valor}</Text>
+              {/* Cards profissionais e influencers */}
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={[styles.finCard, { flex: 1, borderLeftColor: '#7B9BB5' }]}>
+                  <Text style={[styles.finLabel, { fontSize: 12 }]}>👩 Profissionais</Text>
+                  <Text style={[styles.finValor, { color: '#7B9BB5', fontSize: 16 }]}>R$ {saldoProfsDisp.toFixed(2).replace('.', ',')}</Text>
+                  <Text style={{ color: '#CBB8A6', fontSize: 10 }}>disp.</Text>
+                  <Text style={{ color: '#D4AF7F', fontSize: 13, fontWeight: 'bold' }}>R$ {saldoProfsPend.toFixed(2).replace('.', ',')}</Text>
+                  <Text style={{ color: '#CBB8A6', fontSize: 10 }}>pend.</Text>
                 </View>
-              ))}
+                <View style={[styles.finCard, { flex: 1, borderLeftColor: '#D4AF7F' }]}>
+                  <Text style={[styles.finLabel, { fontSize: 12 }]}>⭐ Influencers</Text>
+                  <Text style={[styles.finValor, { color: '#D4AF7F', fontSize: 16 }]}>R$ {saldoInfsDisp.toFixed(2).replace('.', ',')}</Text>
+                  <Text style={{ color: '#CBB8A6', fontSize: 10 }}>disp.</Text>
+                  <Text style={{ color: '#D4AF7F', fontSize: 13, fontWeight: 'bold' }}>R$ {saldoInfsPend.toFixed(2).replace('.', ',')}</Text>
+                  <Text style={{ color: '#CBB8A6', fontSize: 10 }}>pend.</Text>
+                </View>
+              </View>
+
+              {/* Saques com erro */}
+              {saquesPendentes.filter(s => s.status === 'erro').length > 0 && (
+                <View style={[styles.card, { borderLeftWidth: 3, borderLeftColor: '#C0392B' }]}>
+                  <Text style={[styles.cardTitulo, { color: '#C0392B' }]}>⚠️ Saques com erro ({saquesPendentes.filter(s => s.status === 'erro').length})</Text>
+                  {saquesPendentes.filter(s => s.status === 'erro').map((s, i) => (
+                    <View key={i} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#E8DCCF' }}>
+                      <Text style={styles.pedidoNome}>R$ {parseFloat(s.valor).toFixed(2).replace('.', ',')} — {s.chave_pix}</Text>
+                      <Text style={{ color: '#C0392B', fontSize: 12 }}>{s.erro_mensagem}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Botao liberar pagamentos */}
+              <TouchableOpacity
+                style={{ backgroundColor: '#7B9BB5', borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 4, marginBottom: 4, flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                onPress={liberarPagamentos}
+              >
+                <Ionicons name="time-outline" size={18} color="#fff" />
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>Liberar pagamentos (2h concluidos)</Text>
+              </TouchableOpacity>
+
+              {/* Botao processar PIX */}
+              <TouchableOpacity
+                style={{ backgroundColor: '#7BAE7F', borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 4, marginBottom: 4, flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                onPress={processarPixAutomatico}
+              >
+                <Ionicons name="flash-outline" size={18} color="#fff" />
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>Processar PIX automatico (saldo >= R$50)</Text>
+              </TouchableOpacity>
+
+              {/* Ultimas transacoes */}
+              <View style={styles.card}>
+                <Text style={styles.cardTitulo}>Últimas transações</Text>
+                {transacoes.length === 0 && <Text style={{ color: '#CBB8A6', textAlign: 'center', padding: 16 }}>Nenhuma transação ainda</Text>}
+                {transacoes.slice(0, 10).map((tx, i) => (
+                  <View key={i} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#E8DCCF' }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ color: '#6B4F3A', fontWeight: 'bold' }}>R$ {parseFloat(tx.valor_total || 0).toFixed(2).replace('.', ',')}</Text>
+                      <View style={{ backgroundColor: tx.status === 'liberado' ? '#7BAE7F22' : '#D4AF7F22', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 }}>
+                        <Text style={{ color: tx.status === 'liberado' ? '#7BAE7F' : '#D4AF7F', fontSize: 11, fontWeight: 'bold' }}>
+                          {tx.status === 'liberado' ? '✅ Liberado' : '⏳ Pendente'}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 14, marginTop: 4 }}>
+                      <Text style={{ color: '#CBB8A6', fontSize: 11 }}>👩 R$ {parseFloat(tx.valor_profissional || 0).toFixed(2).replace('.', ',')}</Text>
+                      {tx.valor_influencer > 0 && <Text style={{ color: '#CBB8A6', fontSize: 11 }}>⭐ R$ {parseFloat(tx.valor_influencer || 0).toFixed(2).replace('.', ',')}</Text>}
+                      <Text style={{ color: '#CBB8A6', fontSize: 11 }}>🏦 R$ {parseFloat(tx.valor_plataforma || 0).toFixed(2).replace('.', ',')}</Text>
+                    </View>
+                    {tx.cupom_usado && <Text style={{ color: '#D4AF7F', fontSize: 11 }}>🎟 {tx.cupom_usado}</Text>}
+                    <Text style={{ color: '#CBB8A6', fontSize: 10, marginTop: 2 }}>{new Date(tx.criado_em).toLocaleDateString('pt-BR')}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Por método */}
+              <View style={styles.card}>
+                <Text style={styles.cardTitulo}>Por método de pagamento</Text>
+                {[
+                  { id: 'pix', label: '⚡ PIX', cor: '#7BAE7F' },
+                  { id: 'credito', label: '💳 Crédito', cor: '#7B9BB5' },
+                  { id: 'debito', label: '🏦 Débito', cor: '#D4AF7F' },
+                ].map((m) => {
+                  const pct = porMetodo[m.id] > 0 ? (porMetodo[m.id] / faturamento) * 100 : 0;
+                  return (
+                    <View key={m.id} style={styles.metodoLinha}>
+                      <Text style={styles.metodoLabel}>{m.label}</Text>
+                      <View style={styles.metodoBarraWrap}>
+                        <View style={[styles.metodoBarra, { width: `${pct}%`, backgroundColor: m.cor }]} />
+                      </View>
+                      <Text style={[styles.metodoValor, { color: m.cor }]}>R${(porMetodo[m.id] || 0).toFixed(0)}</Text>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
-          </View>
-        )}
+          );
+        })()}
 
         {/* ===== INFLUENCERS ===== */}
         {aba === 'influencers' && (
@@ -598,7 +774,65 @@ export default function Admin() {
 
             {/* Materiais de divulgacao */}
             <View style={{ marginTop: 10, marginBottom: 6 }}>
-              <Text style={[styles.tituloPagina, { fontSize: 16 }]}>Materiais de divulgacao</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <Text style={[styles.tituloPagina, { fontSize: 16 }]}>Materiais de divulgacao ({materiais.length})</Text>
+                <TouchableOpacity
+                  style={{ backgroundColor: '#7BAE7F', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center' }}
+                  onPress={() => setAdicionandoMaterial(!adicionandoMaterial)}
+                >
+                  <Ionicons name="add" size={18} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13, marginLeft: 4 }}>Novo</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Formulario novo material */}
+              {adicionandoMaterial && (
+                <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: '#D4AF7F', marginBottom: 12 }]}>
+                  <Text style={[styles.tituloPagina, { marginBottom: 8, fontSize: 14 }]}>Novo material</Text>
+                  <Text style={styles.infLabel}>Titulo</Text>
+                  <TextInput style={styles.infInput} value={novoMaterial.titulo} onChangeText={(t) => setNovoMaterial({ ...novoMaterial, titulo: t })} placeholder="Ex: Post para Instagram" placeholderTextColor="#CBB8A6" />
+                  <Text style={styles.infLabel}>Descricao (opcional)</Text>
+                  <TextInput style={[styles.infInput, { height: 70, textAlignVertical: 'top' }]} value={novoMaterial.descricao} onChangeText={(t) => setNovoMaterial({ ...novoMaterial, descricao: t })} multiline placeholder="Instrucoes de uso..." placeholderTextColor="#CBB8A6" />
+                  <Text style={styles.infLabel}>Tipo</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                    {['padrao', 'promocao'].map((tp) => (
+                      <TouchableOpacity
+                        key={tp}
+                        style={{ backgroundColor: novoMaterial.tipo === tp ? '#D4AF7F' : '#E8DCCF', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14 }}
+                        onPress={() => setNovoMaterial({ ...novoMaterial, tipo: tp })}
+                      >
+                        <Text style={{ color: novoMaterial.tipo === tp ? '#4A3020' : '#CBB8A6', fontWeight: 'bold', fontSize: 13 }}>
+                          {tp === 'padrao' ? '📌 Padrao' : '🍂 Sazonal'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {uploadandoMaterial ? (
+                    <Text style={{ color: '#CBB8A6', textAlign: 'center', padding: 16 }}>Enviando midia...</Text>
+                  ) : (
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity
+                        style={{ flex: 1, backgroundColor: '#6B4F3A', borderRadius: 10, padding: 12, alignItems: 'center' }}
+                        onPress={() => adicionarMaterial('foto')}
+                      >
+                        <Ionicons name="image-outline" size={20} color="#D4AF7F" />
+                        <Text style={{ color: '#D4AF7F', fontWeight: 'bold', fontSize: 12, marginTop: 4 }}>Upload Foto</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{ flex: 1, backgroundColor: '#6B4F3A', borderRadius: 10, padding: 12, alignItems: 'center' }}
+                        onPress={() => adicionarMaterial('video')}
+                      >
+                        <Ionicons name="videocam-outline" size={20} color="#D4AF7F" />
+                        <Text style={{ color: '#D4AF7F', fontWeight: 'bold', fontSize: 12, marginTop: 4 }}>Upload Video</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  <TouchableOpacity style={{ marginTop: 10, alignItems: 'center' }} onPress={() => setAdicionandoMaterial(false)}>
+                    <Text style={{ color: '#CBB8A6', fontSize: 13 }}>Cancelar</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {materiais.map((m) => (
                 <View key={m.id} style={[styles.card, { borderLeftWidth: 4, borderLeftColor: m.tipo === 'promocao' ? '#C0392B' : '#7BAE7F' }]}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -607,6 +841,9 @@ export default function Admin() {
                         {m.tipo === 'promocao' ? '🍂 Sazonal' : '📌 Padrão'}
                       </Text>
                     </View>
+                    <TouchableOpacity onPress={() => deletarMaterial(m.id)}>
+                      <Ionicons name="trash-outline" size={18} color="#C0392B" />
+                    </TouchableOpacity>
                   </View>
 
                   {editandoMaterial?.id === m.id ? (
@@ -615,8 +852,35 @@ export default function Admin() {
                       <TextInput style={styles.infInput} value={editandoMaterial.titulo} onChangeText={(t) => setEditandoMaterial({ ...editandoMaterial, titulo: t })} placeholderTextColor="#CBB8A6" />
                       <Text style={styles.infLabel}>Descrição / Texto</Text>
                       <TextInput style={[styles.infInput, { height: 80, textAlignVertical: 'top' }]} value={editandoMaterial.descricao} onChangeText={(t) => setEditandoMaterial({ ...editandoMaterial, descricao: t })} multiline placeholderTextColor="#CBB8A6" />
-                      <Text style={styles.infLabel}>URL da foto ou video</Text>
-                      <TextInput style={styles.infInput} value={editandoMaterial.imagem_url || ''} onChangeText={(t) => setEditandoMaterial({ ...editandoMaterial, imagem_url: t })} placeholder="https://..." placeholderTextColor="#CBB8A6" autoCapitalize="none" />
+                      {editandoMaterial.imagem_url ? (
+                        <View style={{ marginBottom: 10 }}>
+                          {editandoMaterial.tipo_arquivo === 'video' ? (
+                            <Text style={{ color: '#7B9BB5', fontSize: 13 }}>▶ Video anexado</Text>
+                          ) : (
+                            <Image source={{ uri: editandoMaterial.imagem_url }} style={{ width: '100%', height: 120, borderRadius: 8 }} resizeMode="cover" />
+                          )}
+                        </View>
+                      ) : null}
+                      {uploadandoMaterial ? (
+                        <Text style={{ color: '#CBB8A6', textAlign: 'center', padding: 10 }}>Enviando...</Text>
+                      ) : (
+                        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+                          <TouchableOpacity
+                            style={{ flex: 1, backgroundColor: '#E8DCCF', borderRadius: 8, padding: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}
+                            onPress={() => trocarMidiaExistente(editandoMaterial, 'foto')}
+                          >
+                            <Ionicons name="image-outline" size={16} color="#6B4F3A" />
+                            <Text style={{ color: '#6B4F3A', fontSize: 12, marginLeft: 4 }}>Trocar foto</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{ flex: 1, backgroundColor: '#E8DCCF', borderRadius: 8, padding: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}
+                            onPress={() => trocarMidiaExistente(editandoMaterial, 'video')}
+                          >
+                            <Ionicons name="videocam-outline" size={16} color="#6B4F3A" />
+                            <Text style={{ color: '#6B4F3A', fontSize: 12, marginLeft: 4 }}>Trocar video</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                       <View style={styles.profBotoes}>
                         <TouchableOpacity style={styles.btnAprovar} onPress={() => salvarMaterial(editandoMaterial)}>
                           <Text style={styles.btnAprovarTexto}>Salvar</Text>
@@ -630,7 +894,13 @@ export default function Admin() {
                     <View>
                       <Text style={styles.profNome}>{m.titulo}</Text>
                       <Text style={styles.profDetalhe}>{m.descricao}</Text>
-                      {m.imagem_url ? <Text style={[styles.profDetalhe, { color: '#7B9BB5' }]}>📎 Midia anexada</Text> : <Text style={styles.profDetalhe}>Sem foto ou video</Text>}
+                      {m.imagem_url ? (
+                        m.tipo_arquivo === 'video'
+                          ? <Text style={[styles.profDetalhe, { color: '#7B9BB5' }]}>▶ Video anexado</Text>
+                          : <Image source={{ uri: m.imagem_url }} style={{ width: '100%', height: 120, borderRadius: 8, marginTop: 8 }} resizeMode="cover" />
+                      ) : (
+                        <Text style={styles.profDetalhe}>Sem foto ou video</Text>
+                      )}
                       <TouchableOpacity style={[styles.btnAprovar, { marginTop: 10 }]} onPress={() => setEditandoMaterial({ ...m })}>
                         <Ionicons name="pencil-outline" size={14} color="#fff" />
                         <Text style={styles.btnAprovarTexto}> Editar</Text>
@@ -640,6 +910,14 @@ export default function Admin() {
                 </View>
               ))}
             </View>
+
+            <TouchableOpacity
+              style={{ backgroundColor: '#7BAE7F', borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 10, marginBottom: 4, flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+              onPress={processarPixAutomatico}
+            >
+              <Ionicons name="flash-outline" size={18} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>Processar PIX automatico (saldo >= R$50)</Text>
+            </TouchableOpacity>
 
             {saquesPendentes.length > 0 && (
               <View style={{ marginTop: 10 }}>
